@@ -11,3 +11,6 @@ on 'test' => sub {
     requires 'String::Random';
 };
 
+on 'develop' => sub {
+    requires 'Pod::Markdown::Github';
+};

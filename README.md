@@ -5,20 +5,22 @@ WebService::Mailgun - API client for Mailgun ([https://mailgun.com/](https://mai
 
 # SYNOPSIS
 
-    use WebService::Mailgun;
+```perl
+use WebService::Mailgun;
 
-    my $mailgun = WebService::Mailgun->new(
-        api_key => '<YOUR_API_KEY>',
-        domain => '<YOUR_MAIL_DOMAIN>',
-    );
+my $mailgun = WebService::Mailgun->new(
+    api_key => '<YOUR_API_KEY>',
+    domain => '<YOUR_MAIL_DOMAIN>',
+);
 
-    # send mail
-    my $res = $mailgun->message({
-        from    => 'foo@example.com',
-        to      => 'bar@example.com',
-        subject => 'test',
-        text    => 'text',
-    });
+# send mail
+my $res = $mailgun->message({
+    from    => 'foo@example.com',
+    to      => 'bar@example.com',
+    subject => 'test',
+    text    => 'text',
+});
+```
 
 # DESCRIPTION
 
@@ -34,13 +36,15 @@ Create mailgun object.
 
 Send email message.
 
-    # send mail
-    my $res = $mailgun->message({
-        from    => 'foo@example.com',
-        to      => 'bar@example.com',
-        subject => 'test',
-        text    => 'text',
-    });
+```perl
+# send mail
+my $res = $mailgun->message({
+    from    => 'foo@example.com',
+    to      => 'bar@example.com',
+    subject => 'test',
+    text    => 'text',
+});
+```
 
 [https://documentation.mailgun.com/api-sending.html#sending](https://documentation.mailgun.com/api-sending.html#sending)
 
@@ -48,9 +52,11 @@ Send email message.
 
 Get list of mailing lists.
 
-    # get mailing lists
-    my $lists = $mailgun->lists();
-    # => ArrayRef of mailing list object.
+```perl
+# get mailing lists
+my $lists = $mailgun->lists();
+# => ArrayRef of mailing list object.
+```
 
 [https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
 
@@ -58,13 +64,15 @@ Get list of mailing lists.
 
 Add mailing list.
 
-    # add mailing list
-    my $res = $mailgun->add_list({
-        address => 'ml@example.com', # Mailing list address
-        name    => 'ml sample',      # Mailing list name (Optional)
-        description => 'sample',     # description (Optional)
-        access_level => 'members',   # readonly(default), members, everyone
-    });
+```perl
+# add mailing list
+my $res = $mailgun->add_list({
+    address => 'ml@example.com', # Mailing list address
+    name    => 'ml sample',      # Mailing list name (Optional)
+    description => 'sample',     # description (Optional)
+    access_level => 'members',   # readonly(default), members, everyone
+});
+```
 
 [https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
 
@@ -72,8 +80,10 @@ Add mailing list.
 
 Get detail for mailing list.
 
-    # get mailing list detail
-    my $data = $mailgun->list('ml@exmaple.com');
+```perl
+# get mailing list detail
+my $data = $mailgun->list('ml@exmaple.com');
+```
 
 [https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
 
@@ -81,13 +91,15 @@ Get detail for mailing list.
 
 Update mailing list detail.
 
-    # update mailing list
-    my $res = $mailgun->update_list('ml@example.com' => {
-        address => 'ml@example.com', # Mailing list address (Optional)
-        name    => 'ml sample',      # Mailing list name (Optional)
-        description => 'sample',     # description (Optional)
-        access_level => 'members',   # readonly(default), members, everyone
-    });
+```perl
+# update mailing list
+my $res = $mailgun->update_list('ml@example.com' => {
+    address => 'ml@example.com', # Mailing list address (Optional)
+    name    => 'ml sample',      # Mailing list name (Optional)
+    description => 'sample',     # description (Optional)
+    access_level => 'members',   # readonly(default), members, everyone
+});
+```
 
 [https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
 
@@ -95,8 +107,10 @@ Update mailing list detail.
 
 Delete mailing list.
 
-    # delete mailing list
-    my $res = $mailgun->delete_list('ml@example.com');
+```perl
+# delete mailing list
+my $res = $mailgun->delete_list('ml@example.com');
+```
 
 [https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
 
@@ -104,8 +118,10 @@ Delete mailing list.
 
 Get members for mailing list.
 
-    # get members
-    my $res = $mailgun->list_members('ml@example.com');
+```perl
+# get members
+my $res = $mailgun->list_members('ml@example.com');
+```
 
 [https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
 
@@ -113,14 +129,16 @@ Get members for mailing list.
 
 Add member for mailing list.
 
-    # add member
-    my $res = $mailgun->add_list_member('ml@example.com' => {
-        address => 'user@example.com', # member address
-        name    => 'username',         # member name (Optional)
-        vars    => '{"age": 34}',      # member params(JSON string) (Optional)
-        subscribed => 'yes',           # yes(default) or no
-        upsert     => 'no',            # no (default). if yes, update exists member
-    });
+```perl
+# add member
+my $res = $mailgun->add_list_member('ml@example.com' => {
+    address => 'user@example.com', # member address
+    name    => 'username',         # member name (Optional)
+    vars    => '{"age": 34}',      # member params(JSON string) (Optional)
+    subscribed => 'yes',           # yes(default) or no
+    upsert     => 'no',            # no (default). if yes, update exists member
+});
+```
 
 [https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
 
@@ -128,22 +146,24 @@ Add member for mailing list.
 
 Adds multiple members for mailing list.
 
-    use JSON::XS; # auto export 'encode_json'
+```perl
+use JSON::XS; # auto export 'encode_json'
 
-    # add members
-    my $res = $mailgun->add_list_members('ml@example.com' => {
-        members => encode_json [
-            { address => 'user1@example.com' },
-            { address => 'user2@example.com' },
-            { address => 'user3@example.com' },
-        ],
-        upsert  => 'no',            # no (default). if yes, update exists member
-    });
+# add members
+my $res = $mailgun->add_list_members('ml@example.com' => {
+    members => encode_json [
+        { address => 'user1@example.com' },
+        { address => 'user2@example.com' },
+        { address => 'user3@example.com' },
+    ],
+    upsert  => 'no',            # no (default). if yes, update exists member
+});
 
-    # too simple
-    my $res = $mailgun->add_list_members('ml@example.com' => {
-        members => encode_json [qw/user1@example.com user2@example.com/],
-    });
+# too simple
+my $res = $mailgun->add_list_members('ml@example.com' => {
+    members => encode_json [qw/user1@example.com user2@example.com/],
+});
+```
 
 [https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
 
@@ -151,8 +171,10 @@ Adds multiple members for mailing list.
 
 Get member detail.
 
-    # update member
-    my $res = $mailgun->list_member('ml@example.com', 'user@example.com');
+```perl
+# update member
+my $res = $mailgun->list_member('ml@example.com', 'user@example.com');
+```
 
 [https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
 
@@ -160,13 +182,15 @@ Get member detail.
 
 Update member detail.
 
-    # update member
-    my $res = $mailgun->update_list_member('ml@example.com', 'user@example.com' => {
-        address => 'user@example.com', # member address (Optional)
-        name    => 'username',         # member name (Optional)
-        vars    => '{"age": 34}',      # member params(JSON string) (Optional)
-        subscribed => 'yes',           # yes(default) or no
-    });
+```perl
+# update member
+my $res = $mailgun->update_list_member('ml@example.com', 'user@example.com' => {
+    address => 'user@example.com', # member address (Optional)
+    name    => 'username',         # member name (Optional)
+    vars    => '{"age": 34}',      # member params(JSON string) (Optional)
+    subscribed => 'yes',           # yes(default) or no
+});
+```
 
 [https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
 
@@ -174,8 +198,10 @@ Update member detail.
 
 Delete member for mailing list.
 
-    # delete member
-    my $res = $mailgun->delete_list_member('ml@example.com' => 'user@example.com');
+```perl
+# delete member
+my $res = $mailgun->delete_list_member('ml@example.com' => 'user@example.com');
+```
 
 [https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
 
