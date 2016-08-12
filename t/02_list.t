@@ -24,8 +24,7 @@ subtest 'add mailing list' => sub {
         description => 'list',
         access_level => 'everyone',
     });
-    my $lists = $mailgun->lists();
-    my $data = $lists->[0];
+    my $data = $mailgun->list(list_address);
     delete $data->{created_at};
     is_deeply $data, {
         address => list_address,
@@ -98,7 +97,7 @@ subtest 'delete list member' => sub {
 
 subtest 'delete mailing list' => sub {
     ok my $res = $mailgun->delete_list(list_address);
-    dies_ok { my $lists = $mailgun->list(list_address); }, '', 'delete list';
+    dies_ok { my $list = $mailgun->list(list_address); }, '', 'delete list';
 };
 
 done_testing;
