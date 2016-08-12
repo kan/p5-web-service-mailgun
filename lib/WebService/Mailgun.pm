@@ -5,6 +5,7 @@ use warnings;
 
 use Furl;
 use JSON::XS;
+use URI;
 
 our $VERSION = "0.01";
 our $API_BASE = 'api.mailgun.net/v3';
@@ -13,6 +14,18 @@ use Class::Accessor::Lite (
     new => 1,
     rw  => [qw(api_key domain)],
 );
+
+sub decode_response ($) {
+    my $res = shift;
+
+    if ($res->is_success) {
+        return decode_json $res->content;
+    } else {
+        my $json = decode_json $res->content;
+        warn $json->{message};
+        die $res->status_line;
+    }
+}
 
 sub client {
     my $self = shift;
@@ -25,6 +38,13 @@ sub client {
 sub api_url {
     my ($self, $method) = @_;
 
+    sprintf 'https://api:%s@%s/%s',
+        $self->api_key, $API_BASE, $method;
+}
+
+sub domain_api_url {
+    my ($self, $method) = @_;
+
     sprintf 'https://api:%s@%s/%s/%s',
         $self->api_key, $API_BASE, $self->domain, $method;
 }
@@ -32,14 +52,55 @@ sub api_url {
 sub message {
     my ($self, $args) = @_;
 
-    my $res = $self->client->post($self->api_url('messages'), [], $args);
-    if ($res->is_success) {
-        return decode_json $res->content;
-    } else {
-        my $json = decode_json $res->content;
-        warn $json->{message};
-        die $res->status_line;
+    my $res = $self->client->post($self->domain_api_url('messages'), [], $args);
+    decode_response $res;
+}
+
+sub lists {
+    my $self = shift;
+    my $query = '';
+    my @result;
+
+    while (1) {
+        my $api_uri = URI->new($self->api_url('lists/pages'));
+        $api_uri->query($query);
+        my $res = $self->client->get($api_uri->as_string);
+        my $json = decode_response $res;
+        last unless scalar @{$json->{items}};
+        push @result, @{$json->{items}};
+        my $next_uri = URI->new($json->{paging}->{next});
+        $query = $next_uri->query;
     }
+
+    return \@result;
+}
+
+sub add_list {
+    my ($self, $args) = @_;
+
+    my $res = $self->client->post($self->api_url("lists"), [], $args);
+    decode_response $res;
+}
+
+sub list {
+    my ($self, $address) = @_;
+
+    my $res = $self->client->get($self->api_url("lists/$address"));
+    decode_response $res;
+}
+
+sub update_list {
+    my ($self, $address, $args) = @_;
+
+    my $res = $self->client->put($self->api_url("lists/$address"), [], $args);
+    decode_response $res;
+}
+
+sub delete_list {
+    my ($self, $address) = @_;
+
+    my $res = $self->client->delete($self->api_url("lists/$address"));
+    decode_response $res;
 }
 
 
