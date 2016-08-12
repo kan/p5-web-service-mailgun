@@ -1,4 +1,4 @@
 name = "WebService-Mailgun"
-# badges = ["travis"]
+badges = ["travis", "coveralls"]
 module_maker="ModuleBuildTiny"
 
