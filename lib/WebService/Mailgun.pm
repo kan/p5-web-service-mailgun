@@ -94,7 +94,8 @@ sub list {
     my ($self, $address) = @_;
 
     my $res = $self->client->get($self->api_url("lists/$address"));
-    decode_response $res;
+    my $json = decode_response $res;
+    return $json->{list};
 }
 
 sub update_list {
@@ -128,8 +129,6 @@ sub add_list_member {
 sub add_list_members {
     my ($self, $address, $args) = @_;
 
-    use Data::Dumper;
-    warn Dumper($args);
     my $res = $self->client->post(
         $self->api_url("lists/$address/members.json"), [], $args);
     decode_response $res;
@@ -139,7 +138,8 @@ sub list_member {
     my ($self, $address, $member) = @_;
 
     my $res = $self->client->get($self->api_url("lists/$address/members/$member"));
-    decode_response $res;
+    my $json = decode_response $res;
+    return $json->{member};
 }
 
 sub update_list_member {
@@ -308,6 +308,15 @@ Adds multiple members for mailing list.
     my $res = $mailgun->add_list_members('ml@example.com' => {
         members => encode_json [qw/user1@example.com user2@example.com/],
     });
+
+L<https://documentation.mailgun.com/api-mailinglists.html#mailing-lists>
+
+=head2 list_member($address, $member_address)
+
+Get member detail.
+
+    # update member
+    my $res = $mailgun->list_member('ml@example.com', 'user@example.com');
 
 L<https://documentation.mailgun.com/api-mailinglists.html#mailing-lists>
 

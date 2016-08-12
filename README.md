@@ -146,6 +146,15 @@ Adds multiple members for mailing list.
 
 [https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
 
+## list\_member($address, $member\_address)
+
+Get member detail.
+
+    # update member
+    my $res = $mailgun->list_member('ml@example.com', 'user@example.com');
+
+[https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
+
 ## update\_list\_member($address, $member\_address, $args)
 
 Update member detail.

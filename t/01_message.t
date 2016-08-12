@@ -3,8 +3,8 @@ use Test::More 0.98;
 use WebService::Mailgun;
 
 my $mailgun = WebService::Mailgun->new(
-    api_key => 'key-5fadc3ab81fdda5d628fd3a7dbe3ff57',
-    domain => 'sandbox38e48dc6b2204f97ba1220db925e7827.mailgun.org',
+    api_key => 'key-389807c554fdfe0a7757adf0650f7768',
+    domain  => 'sandbox56435abd76e84fa6b03de82540e11271.mailgun.org',
 );
 
 ok my $res = $mailgun->message({
