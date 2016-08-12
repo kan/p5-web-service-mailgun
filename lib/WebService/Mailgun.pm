@@ -27,6 +27,27 @@ sub decode_response ($) {
     }
 }
 
+sub recursive {
+    my ($self, $method, $key) = @_;
+
+    $key //= 'items';
+    my $query = '';
+    my @result;
+
+    while (1) {
+        my $api_uri = URI->new($self->api_url($method));
+        $api_uri->query($query);
+        my $res = $self->client->get($api_uri->as_string);
+        my $json = decode_response $res;
+        last unless scalar @{$json->{$key}};
+        push @result, @{$json->{$key}};
+        my $next_uri = URI->new($json->{paging}->{next});
+        $query = $next_uri->query;
+    }
+
+    return \@result;
+}
+
 sub client {
     my $self = shift;
 
@@ -58,21 +79,8 @@ sub message {
 
 sub lists {
     my $self = shift;
-    my $query = '';
-    my @result;
 
-    while (1) {
-        my $api_uri = URI->new($self->api_url('lists/pages'));
-        $api_uri->query($query);
-        my $res = $self->client->get($api_uri->as_string);
-        my $json = decode_response $res;
-        last unless scalar @{$json->{items}};
-        push @result, @{$json->{items}};
-        my $next_uri = URI->new($json->{paging}->{next});
-        $query = $next_uri->query;
-    }
-
-    return \@result;
+    return $self->recursive('lists/pages');
 }
 
 sub add_list {
@@ -103,6 +111,52 @@ sub delete_list {
     decode_response $res;
 }
 
+sub list_members {
+    my ($self, $address) = @_;
+
+    return $self->recursive("lists/$address/members/pages");
+}
+
+sub add_list_member {
+    my ($self, $address, $args) = @_;
+
+    my $res = $self->client->post(
+        $self->api_url("lists/$address/members"), [], $args);
+    decode_response $res;
+}
+
+sub add_list_members {
+    my ($self, $address, $args) = @_;
+
+    use Data::Dumper;
+    warn Dumper($args);
+    my $res = $self->client->post(
+        $self->api_url("lists/$address/members.json"), [], $args);
+    decode_response $res;
+}
+
+sub list_member {
+    my ($self, $address, $member) = @_;
+
+    my $res = $self->client->get($self->api_url("lists/$address/members/$member"));
+    decode_response $res;
+}
+
+sub update_list_member {
+    my ($self, $address, $member, $args) = @_;
+
+    my $res = $self->client->put(
+        $self->api_url("lists/$address/members/$member"), [], $args);
+    decode_response $res;
+}
+
+sub delete_list_member {
+    my ($self, $address, $member) = @_;
+
+    my $res = $self->client->delete(
+        $self->api_url("lists/$address/members/$member"));
+    decode_response $res;
+}
 
 1;
 __END__
