@@ -7,7 +7,7 @@ use Furl;
 use JSON::XS;
 use URI;
 
-our $VERSION = "0.01";
+our $VERSION = "0.02";
 our $API_BASE = 'api.mailgun.net/v3';
 
 use Class::Accessor::Lite (

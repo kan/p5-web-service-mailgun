@@ -3,7 +3,7 @@ requires 'IO::Socket::SSL';
 requires 'Furl';
 requires 'JSON::XS';
 requires 'URI';
-requires 'perl', '5.008001';
+requires 'perl', '5.010000';
 
 on 'test' => sub {
     requires 'Test::More', '0.98';
