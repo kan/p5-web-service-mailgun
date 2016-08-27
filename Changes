@@ -2,6 +2,10 @@ Revision history for Perl extension WebService-Mailgun
 
 {{$NEXT}}
 
+0.04 2016-08-27T11:40:16Z
+
+    - fix cpanfile (add Try::Tiny)
+
 0.03 2016-08-27T06:27:03Z
 
     - fix the behavior at the time of error

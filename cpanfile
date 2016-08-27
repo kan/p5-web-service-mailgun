@@ -3,6 +3,7 @@ requires 'IO::Socket::SSL';
 requires 'Furl';
 requires 'JSON::XS';
 requires 'URI';
+requires 'Try::Tiny';
 requires 'perl', '5.010000';
 
 on 'test' => sub {
