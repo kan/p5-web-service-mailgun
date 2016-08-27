@@ -9,7 +9,7 @@ use URI;
 use Try::Tiny;
 use Carp;
 
-our $VERSION = "0.02";
+our $VERSION = "0.03";
 our $API_BASE = 'api.mailgun.net/v3';
 
 use Class::Accessor::Lite (
@@ -210,7 +210,7 @@ Create mailgun object.
 
 =head3 RaiseError (default: 0)
 
-The RaiseError attribute can be used to force errors to raise exceptions rather than simply return error codes in the normal way. It is "off" by defult.
+The RaiseError attribute can be used to force errors to raise exceptions rather than simply return error codes in the normal way. It is "off" by default.
 
 =head2 error
 
