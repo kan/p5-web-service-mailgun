@@ -2,6 +2,13 @@ Revision history for Perl extension WebService-Mailgun
 
 {{$NEXT}}
 
+0.03 2016-08-27T06:27:03Z
+
+    - fix the behavior at the time of error
+    - add RaiseError option
+    - add error, error_status method
+    - fix error message (use carp and croak)
+
 0.02 2016-08-13T02:41:53Z
 
     - fix unit test

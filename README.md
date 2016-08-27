@@ -28,9 +28,21 @@ WebService::Mailgun is API client for Mailgun ([https://mailgun.com/](https://ma
 
 # METHOD
 
-## new(api\_key => $api\_key, domain => $domain)
+## new(api\_key => $api\_key, domain => $domain, RaiseError => 0|1)
 
 Create mailgun object.
+
+### RaiseError (default: 0)
+
+The RaiseError attribute can be used to force errors to raise exceptions rather than simply return error codes in the normal way. It is "off" by default.
+
+## error
+
+return recent error message.
+
+## error\_status
+
+return recent API result status\_line.
 
 ## message($args)
 
