@@ -8,6 +8,7 @@ use String::Random;
 my $mailgun = WebService::Mailgun->new(
     api_key => 'key-389807c554fdfe0a7757adf0650f7768',
     domain  => 'sandbox56435abd76e84fa6b03de82540e11271.mailgun.org',
+    RaiseError => 1,
 );
 
 my $listname = String::Random->new->randregex('[a-z0-9]{16}');

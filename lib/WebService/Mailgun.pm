@@ -6,24 +6,38 @@ use warnings;
 use Furl;
 use JSON::XS;
 use URI;
+use Try::Tiny;
+use Carp;
 
 our $VERSION = "0.02";
 our $API_BASE = 'api.mailgun.net/v3';
 
 use Class::Accessor::Lite (
     new => 1,
-    rw  => [qw(api_key domain)],
+    rw  => [qw(api_key domain RaiseError)],
+    ro  => [qw(error error_status)],
 );
 
-sub decode_response ($) {
-    my $res = shift;
+sub decode_response {
+    my ($self, $res) = @_;
 
     if ($res->is_success) {
         return decode_json $res->content;
     } else {
-        my $json = decode_json $res->content;
-        warn $json->{message};
-        die $res->status_line;
+        my $json;
+        try {
+            $json = decode_json $res->content;
+        } catch {
+            $json = { message => $res->content };
+        };
+        $self->{error} = $json->{message};
+        $self->{error_status} = $res->status_line;
+        if ($self->RaiseError) {
+            carp $self->error;
+            croak $self->error_status;
+        } else {
+            return;
+        }
     }
 }
 
@@ -38,8 +52,8 @@ sub recursive {
         my $api_uri = URI->new($self->api_url($method));
         $api_uri->query($query);
         my $res = $self->client->get($api_uri->as_string);
-        my $json = decode_response $res;
-        last unless scalar @{$json->{$key}};
+        my $json = $self->decode_response($res);
+        last unless $json && scalar @{$json->{$key}};
         push @result, @{$json->{$key}};
         my $next_uri = URI->new($json->{paging}->{next});
         $query = $next_uri->query;
@@ -74,7 +88,7 @@ sub message {
     my ($self, $args) = @_;
 
     my $res = $self->client->post($self->domain_api_url('messages'), [], $args);
-    decode_response $res;
+    $self->decode_response($res);
 }
 
 sub lists {
@@ -87,14 +101,14 @@ sub add_list {
     my ($self, $args) = @_;
 
     my $res = $self->client->post($self->api_url("lists"), [], $args);
-    decode_response $res;
+    $self->decode_response($res);
 }
 
 sub list {
     my ($self, $address) = @_;
 
     my $res = $self->client->get($self->api_url("lists/$address"));
-    my $json = decode_response $res;
+    my $json = $self->decode_response($res) or return;
     return $json->{list};
 }
 
@@ -102,14 +116,14 @@ sub update_list {
     my ($self, $address, $args) = @_;
 
     my $res = $self->client->put($self->api_url("lists/$address"), [], $args);
-    decode_response $res;
+    $self->decode_response($res);
 }
 
 sub delete_list {
     my ($self, $address) = @_;
 
     my $res = $self->client->delete($self->api_url("lists/$address"));
-    decode_response $res;
+    $self->decode_response($res);
 }
 
 sub list_members {
@@ -123,7 +137,7 @@ sub add_list_member {
 
     my $res = $self->client->post(
         $self->api_url("lists/$address/members"), [], $args);
-    decode_response $res;
+    $self->decode_response($res);
 }
 
 sub add_list_members {
@@ -131,14 +145,14 @@ sub add_list_members {
 
     my $res = $self->client->post(
         $self->api_url("lists/$address/members.json"), [], $args);
-    decode_response $res;
+    $self->decode_response($res);
 }
 
 sub list_member {
     my ($self, $address, $member) = @_;
 
     my $res = $self->client->get($self->api_url("lists/$address/members/$member"));
-    my $json = decode_response $res;
+    my $json = $self->decode_response($res) or return;
     return $json->{member};
 }
 
@@ -147,7 +161,7 @@ sub update_list_member {
 
     my $res = $self->client->put(
         $self->api_url("lists/$address/members/$member"), [], $args);
-    decode_response $res;
+    $self->decode_response($res);
 }
 
 sub delete_list_member {
@@ -155,7 +169,7 @@ sub delete_list_member {
 
     my $res = $self->client->delete(
         $self->api_url("lists/$address/members/$member"));
-    decode_response $res;
+    $self->decode_response($res);
 }
 
 1;
@@ -190,9 +204,21 @@ WebService::Mailgun is API client for Mailgun (L<https://mailgun.com/>).
 
 =head1 METHOD
 
-=head2 new(api_key => $api_key, domain => $domain)
+=head2 new(api_key => $api_key, domain => $domain, RaiseError => 0|1)
 
 Create mailgun object.
+
+=head3 RaiseError (default: 0)
+
+The RaiseError attribute can be used to force errors to raise exceptions rather than simply return error codes in the normal way. It is "off" by defult.
+
+=head2 error
+
+return recent error message.
+
+=head2 error_status
+
+return recent API result status_line.
 
 =head2 message($args)
 
