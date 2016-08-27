@@ -25,6 +25,8 @@ subtest 'add mailing list' => sub {
         description => 'list',
         access_level => 'everyone',
     });
+    my $lists = $mailgun->lists();
+    ok scalar(@$lists) >= 1, 'get lists';
     my $data = $mailgun->list(list_address);
     delete $data->{created_at};
     is_deeply $data, {
