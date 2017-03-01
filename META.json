@@ -4,7 +4,7 @@
       "Kan Fushihara <kan.fushihara@gmail.com>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Minilla/v3.0.4, CPAN::Meta::Converter version 2.150005",
+   "generated_by" : "Minilla/v3.0.10, CPAN::Meta::Converter version 2.150005",
    "license" : [
       "perl_5"
    ],
@@ -33,6 +33,7 @@
       },
       "develop" : {
          "requires" : {
+            "Minilla" : "0",
             "Pod::Markdown::Github" : "0",
             "Test::CPAN::Meta" : "0",
             "Test::MinimumVersion::Fast" : "0.04",

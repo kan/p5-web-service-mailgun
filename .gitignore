@@ -29,3 +29,6 @@ cover_db/
 MYMETA.*
 
 /WebService-Mailgun-*
+/.build
+!Build/
+!META.json

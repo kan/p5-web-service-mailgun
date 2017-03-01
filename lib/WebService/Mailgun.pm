@@ -9,7 +9,7 @@ use URI;
 use Try::Tiny;
 use Carp;
 
-our $VERSION = "0.04";
+our $VERSION = "0.05";
 our $API_BASE = 'api.mailgun.net/v3';
 
 use Class::Accessor::Lite (
@@ -169,6 +169,13 @@ sub delete_list_member {
 
     my $res = $self->client->delete(
         $self->api_url("lists/$address/members/$member"));
+    $self->decode_response($res);
+}
+
+sub event {
+    my ($self, $args) = @_;
+
+    my $res = $self->client->get($self->api_url("events"));
     $self->decode_response($res);
 }
 
