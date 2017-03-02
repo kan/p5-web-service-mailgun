@@ -56,6 +56,7 @@ sub recursive {
         my $json = $self->decode_response($res);
         unless($json && scalar @{$json->{$key}}) {
             $previous = URI->new($json->{paging}->{previous})->query_form;
+            last;
         }
         push @result, @{$json->{$key}};
         my $next_uri = URI->new($json->{paging}->{next});
