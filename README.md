@@ -217,12 +217,48 @@ my $res = $mailgun->delete_list_member('ml@example.com' => 'user@example.com');
 
 [https://documentation.mailgun.com/api-mailinglists.html#mailing-lists](https://documentation.mailgun.com/api-mailinglists.html#mailing-lists)
 
+## event($option|$uri)
+
+Get event data.
+
+```perl
+# get event data
+my ($events, $purl) = $mailgun->event({ event => 'stored' });
+```
+
+[Events](https://documentation.mailgun.com/api-events.html)
+
+## get\_message\_from\_event($event)
+
+Get stored message.
+
+```perl
+# get event data
+my ($events, $purl) = $mailgun->event({ event => 'stored' });
+my $msg = $mailgun->get_message_from_event($events->[0]);
+```
+
+[Stored Message](https://documentation.mailgun.com/api-sending.html#retrieving-stored-messages)
+
+# Event Pooling
+
+event method return previous url. it can use for fetch event.
+
+```perl
+# event Pooling
+my ($events, $purl) = $mailgun->event({ event => 'stored' });
+// do something ...
+$events = $mailgun->event($purl);
+// ...
+```
+
+[Event Polling](https://documentation.mailgun.com/api-events.html#event-polling)    
+
 # TODO
 
 this API not implement yet.
 
 - [Domains](https://documentation.mailgun.com/api-domains.html)
-- [Events](https://documentation.mailgun.com/api-events.html)
 - [Stats](https://documentation.mailgun.com/api-stats.html)
 - [Tags](https://documentation.mailgun.com/api-tags.html)
 - [Suppressions](https://documentation.mailgun.com/api-suppressions.html)

@@ -2,6 +2,12 @@ Revision history for Perl extension WebService-Mailgun
 
 {{$NEXT}}
 
+0.06 2017-03-02T17:23:41Z
+    - fix recursive fetch data
+    - support event recursive fetch
+    - add get_message_from_event
+    - update document
+
 0.05 2017-03-01T11:27:57Z
 
     - support Event API
