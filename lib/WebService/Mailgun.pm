@@ -182,7 +182,22 @@ sub delete_list_member {
 sub event {
     my ($self, $args) = @_;
 
-    return $self->recursive("events", $args);
+    if (ref($args) && ref($args) eq 'HASH') {
+        return $self->recursive("events", $args);
+    } else {
+        return $self->recursive("events", {}, 'items', URI->new($args));
+    }
+}
+
+sub get_message_from_event {
+    my ($self, $event) = @_;
+
+    die "invalid event! this method need 'stored' event only." if $event->{event} ne 'stored';
+    my $uri = URI->new($event->{storage}->{url});
+    $uri->userinfo('api:'.$self->api_key);
+
+    my $res = $self->client->get($uri->as_string);
+    $self->decode_response($res);
 }
 
 1;
