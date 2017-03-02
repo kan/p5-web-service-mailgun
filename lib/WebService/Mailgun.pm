@@ -9,7 +9,7 @@ use URI;
 use Try::Tiny;
 use Carp;
 
-our $VERSION = "0.05";
+our $VERSION = "0.06";
 our $API_BASE = 'api.mailgun.net/v3';
 
 use Class::Accessor::Lite (
@@ -42,24 +42,27 @@ sub decode_response {
 }
 
 sub recursive {
-    my ($self, $method, $key) = @_;
+    my ($self, $method, $query, $key) = @_;
 
+    $query //= {};
     $key //= 'items';
-    my $query = '';
     my @result;
+    my $previous;
 
     while (1) {
         my $api_uri = URI->new($self->api_url($method));
-        $api_uri->query($query);
+        $api_uri->query_form($query);
         my $res = $self->client->get($api_uri->as_string);
         my $json = $self->decode_response($res);
-        last unless $json && scalar @{$json->{$key}};
+        unless($json && scalar @{$json->{$key}}) {
+            $previous = URI->new($json->{paging}->{previous})->query_form;
+        }
         push @result, @{$json->{$key}};
         my $next_uri = URI->new($json->{paging}->{next});
-        $query = $next_uri->query;
+        $query = $next_uri->query_form;
     }
 
-    return \@result;
+    return \@result, $previous;
 }
 
 sub client {
@@ -175,8 +178,7 @@ sub delete_list_member {
 sub event {
     my ($self, $args) = @_;
 
-    my $res = $self->client->get($self->api_url("events"));
-    $self->decode_response($res);
+    return $self->recursive("events", $args);
 }
 
 1;
