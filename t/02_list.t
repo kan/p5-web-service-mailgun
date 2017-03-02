@@ -25,7 +25,7 @@ subtest 'add mailing list' => sub {
         description => 'list',
         access_level => 'everyone',
     });
-    my $lists = $mailgun->lists();
+    my ($lists,undef) = $mailgun->lists();
     ok scalar(@$lists) >= 1, 'get lists';
     my $data = $mailgun->list(list_address);
     delete $data->{created_at};
@@ -65,7 +65,8 @@ subtest 'add mailing list member' => sub {
         members => encode_json [qw/user2@example.com user3@example.com/],
     });
 
-    ok my $members = $mailgun->list_members(list_address);
+    my ($members, $undef) = $mailgun->list_members(list_address);
+    ok $members;
     ok scalar(@$members) == 3, 'list members';
 
     my $member = $mailgun->list_member(list_address, 'user1@example.com');
@@ -94,7 +95,7 @@ subtest 'update list member' => sub {
 
 subtest 'delete list member' => sub {
     ok my $res = $mailgun->delete_list_member(list_address, 'user1@example.com');
-    my $members = $mailgun->list_members(list_address);
+    my ($members, undef) = $mailgun->list_members(list_address);
     ok scalar(@$members) == 2, 'list members';
 };
 

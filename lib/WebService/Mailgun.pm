@@ -42,25 +42,28 @@ sub decode_response {
 }
 
 sub recursive {
-    my ($self, $method, $query, $key) = @_;
+    my ($self, $method, $query, $key, $api_uri) = @_;
 
     $query //= {};
     $key //= 'items';
     my @result;
     my $previous;
+    unless($api_uri) {
+        $api_uri = URI->new($self->api_url($method));
+        $api_uri->query_form($query);
+    }
 
     while (1) {
-        my $api_uri = URI->new($self->api_url($method));
-        $api_uri->query_form($query);
         my $res = $self->client->get($api_uri->as_string);
         my $json = $self->decode_response($res);
         unless($json && scalar @{$json->{$key}}) {
-            $previous = URI->new($json->{paging}->{previous})->query_form;
+            $previous = URI->new($json->{paging}->{previous});
+            $previous->userinfo('api:'.$self->api_key);
             last;
         }
         push @result, @{$json->{$key}};
-        my $next_uri = URI->new($json->{paging}->{next});
-        $query = $next_uri->query_form;
+        $api_uri = URI->new($json->{paging}->{next});
+        $api_uri->userinfo('api:'.$self->api_key);
     }
 
     return \@result, $previous;

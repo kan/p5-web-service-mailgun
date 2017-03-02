@@ -3,6 +3,8 @@ use Test::More 0.98;
 use Test::Exception;
 use WebService::Mailgun;
 use JSON::XS;
+use Time::Piece;
+use Time::Seconds;
 
 my $mailgun = WebService::Mailgun->new(
     api_key => 'key-389807c554fdfe0a7757adf0650f7768',
@@ -11,11 +13,13 @@ my $mailgun = WebService::Mailgun->new(
 );
 
 subtest 'get events' => sub {
-    ok my $res = $mailgun->event({
+    my $now = localtime;
+    my ($res, undef) = $mailgun->event({
+            begin => ($now - ONE_HOUR)->epoch(),
     });
+    ok $res;
+    ok scalar(@$res) > 0, 'event results';
     note explain $res;
-    use Data::Dumper;
-    warn Dumper($res);
 };
 
 done_testing;
