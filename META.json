@@ -4,7 +4,7 @@
       "Kan Fushihara <kan.fushihara@gmail.com>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Minilla/v3.0.10, CPAN::Meta::Converter version 2.150005",
+   "generated_by" : "Minilla/v3.0.10, CPAN::Meta::Converter version 2.150001",
    "license" : [
       "perl_5"
    ],
@@ -14,15 +14,8 @@
    },
    "name" : "WebService-Mailgun",
    "no_index" : {
-      "directory" : [
-         "t",
-         "xt",
-         "inc",
-         "share",
-         "eg",
-         "examples",
-         "author",
-         "builder"
+      "file" : [
+         "Dockerfile"
       ]
    },
    "prereqs" : {
@@ -73,6 +66,5 @@
          "web" : "https://github.com/kan/p5-web-service-mailgun"
       }
    },
-   "version" : "0.04",
-   "x_serialization_backend" : "JSON::PP version 2.27300"
+   "version" : "0.05"
 }
