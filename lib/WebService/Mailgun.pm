@@ -397,6 +397,37 @@ Delete member for mailing list.
 
 L<https://documentation.mailgun.com/api-mailinglists.html#mailing-lists>
 
+=head2 event($option|$uri)
+
+Get event data.
+
+    # get event data
+    my ($events, $purl) = $mailgun->event({ event => 'stored' });
+
+L<Events|https://documentation.mailgun.com/api-events.html>
+
+=head2 get_message_from_event($event)
+
+Get stored message.
+
+    # get event data
+    my ($events, $purl) = $mailgun->event({ event => 'stored' });
+    my $msg = $mailgun->get_message_from_event($events->[0]);
+
+L<Stored Message|https://documentation.mailgun.com/api-sending.html#retrieving-stored-messages>
+
+=head1 Event Pooling
+
+event method return previous url. it can use for fetch event.
+
+    # event Pooling
+    my ($events, $purl) = $mailgun->event({ event => 'stored' });
+    // do something ...
+    $events = $mailgun->event($purl);
+    // ...
+
+L<Event Polling|https://documentation.mailgun.com/api-events.html#event-polling>    
+
 =head1 TODO
 
 this API not implement yet.
@@ -404,8 +435,6 @@ this API not implement yet.
 =over
 
 =item * L<Domains|https://documentation.mailgun.com/api-domains.html>
-
-=item * L<Events|https://documentation.mailgun.com/api-events.html>
 
 =item * L<Stats|https://documentation.mailgun.com/api-stats.html>
 
