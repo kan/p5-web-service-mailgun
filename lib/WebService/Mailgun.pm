@@ -9,7 +9,7 @@ use URI;
 use Try::Tiny;
 use Carp;
 
-our $VERSION = "0.7.0";
+our $VERSION = "0.07";
 our $API_BASE = 'api.mailgun.net/v3';
 
 use Class::Accessor::Lite (

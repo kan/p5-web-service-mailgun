@@ -70,7 +70,7 @@
          "web" : "https://github.com/kan/p5-web-service-mailgun"
       }
    },
-   "version" : "0.7.0",
+   "version" : "0.07",
    "x_serialization_backend" : "JSON::PP version 4.02",
    "x_static_install" : 1
 }
