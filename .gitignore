@@ -32,3 +32,6 @@ MYMETA.*
 /.build
 !Build/
 !META.json
+
+.envrc
+docker-compose-local.yml
