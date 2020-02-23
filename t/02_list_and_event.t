@@ -4,6 +4,8 @@ use Test::Exception;
 use WebService::Mailgun;
 use JSON::XS;
 use String::Random;
+use Time::Piece;
+use Time::Seconds;
 
 my $mailgun = WebService::Mailgun->new(
     api_key => 'key-389807c554fdfe0a7757adf0650f7768',
@@ -102,6 +104,15 @@ subtest 'delete list member' => sub {
 subtest 'delete mailing list' => sub {
     ok my $res = $mailgun->delete_list(list_address);
     dies_ok { my $list = $mailgun->list(list_address); }, '', 'delete list';
+};
+
+subtest 'get events' => sub {
+    my ($res, undef) = $mailgun->event({
+            'event' => 'list_uploaded',
+    });
+    ok $res;
+    cmp_ok( scalar(@$res), ">=", 1, 'event results found' );
+    note explain $res;
 };
 
 done_testing;
