@@ -104,5 +104,14 @@ subtest 'delete mailing list' => sub {
     dies_ok { my $list = $mailgun->list(list_address); }, '', 'delete list';
 };
 
+subtest 'get events' => sub {
+    my ($res, undef) = $mailgun->event({
+        event => 'list_uploaded',
+    });
+    ok $res;
+    cmp_ok( scalar(@$res), ">=", 1, 'event results found' );
+    note explain $res;
+};
+
 done_testing;
 
