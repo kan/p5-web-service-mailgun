@@ -10,7 +10,7 @@ use Try::Tiny;
 use Carp;
 use HTTP::Request::Common;
 
-our $VERSION = "0.09";
+our $VERSION = "0.10";
 our $API_BASE = 'api.mailgun.net/v3';
 
 use Class::Accessor::Lite (
@@ -95,7 +95,18 @@ sub domain_api_url {
 sub message {
     my ($self, $args) = @_;
 
-    my $req = POST $self->domain_api_url('messages'), Content_type => 'form-data', Content => [ %$args ];
+    my @content;
+    if (ref($args) eq 'HASH') {
+        @content = %$args;
+    }
+    elsif (ref($args) eq 'ARRAY') {
+        @content = @$args;
+    }
+    else {
+        die 'unsupport argument. message() need HashRef or ArrayRef.';
+    }
+
+    my $req = POST $self->domain_api_url('messages'), Content_type => 'form-data', Content => \@content;
 
     my $res = $self->client->request($req);
     $self->decode_response($res);

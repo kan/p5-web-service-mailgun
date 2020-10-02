@@ -2,6 +2,9 @@ Revision history for Perl extension WebService-Mailgun
 
 {{$NEXT}}
 
+0.10 2020-10-02T06:06:25Z
+    - Fix message() to support both HashRef and ArrayRef
+
 0.09 2020-10-02T05:32:25Z
     - support send attachment files
     - fix some test case
