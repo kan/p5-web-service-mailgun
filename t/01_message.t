@@ -18,5 +18,17 @@ ok my $res = $mailgun->message({
 is $res->{message}, 'Queued. Thank you.';
 note $res->{id};
 
+ok my $res2 = $mailgun->message({
+    from => 'test@perl.example.com',
+    to => 'kan.fushihara@gmail.com',
+    subject => 'test message',
+    text => 'Hello, perl',
+    attachment => [ 't/01_message.t' ],
+    'o:testmode' => 'true',
+});
+
+is $res2->{message}, 'Queued. Thank you.';
+note $res2;
+
 done_testing;
 
