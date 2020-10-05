@@ -15,7 +15,8 @@
    "name" : "WebService-Mailgun",
    "no_index" : {
       "file" : [
-         "Dockerfile"
+         "Dockerfile",
+         "docker-compose.yml"
       ]
    },
    "prereqs" : {
