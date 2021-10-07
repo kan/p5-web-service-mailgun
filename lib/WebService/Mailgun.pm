@@ -109,8 +109,8 @@ sub message {
         @content = @$args;
     }
     else {
-        die 'unsupport argument. message() needs a hash ref or an array ref.';
-    }
+        die 'unsupport argument. message() need HashRef or ArrayRef.';    
+	}
 
     my $req = POST $self->domain_api_url('messages'), Content_type => 'form-data', Content => \@content;
 
