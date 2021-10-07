@@ -41,6 +41,7 @@
       "runtime" : {
          "requires" : {
             "Class::Accessor::Lite" : "0",
+            "File::Temp" : "0",
             "Furl" : "0",
             "HTTP::Request::Common" : "0",
             "IO::Socket::SSL" : "0",
