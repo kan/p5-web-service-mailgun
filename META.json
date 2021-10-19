@@ -4,7 +4,7 @@
       "Kan Fushihara <kan.fushihara@gmail.com>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Minilla/v3.1.12, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "Minilla/v3.1.8, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "perl_5"
    ],
@@ -73,9 +73,10 @@
          "web" : "https://github.com/kan/p5-web-service-mailgun"
       }
    },
-   "version" : "0.11",
+   "version" : "0.12",
    "x_contributors" : [
-      "Josh Rabinowitz <joshr@joshr.com>"
+      "Josh Rabinowitz <joshr@joshr.com>",
+      "justingit <perl@justinsimoni.com>"
    ],
    "x_serialization_backend" : "JSON::PP version 4.02",
    "x_static_install" : 1
