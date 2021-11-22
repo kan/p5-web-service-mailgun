@@ -6,7 +6,7 @@ use strict;
 use warnings;
 
 use Furl;
-use JSON::XS;
+use JSON;
 use URI;
 use Try::Tiny;
 use Carp;
@@ -460,7 +460,7 @@ L<https://documentation.mailgun.com/en/latest/api-mailinglists.html#mailing-list
 
 Adds multiple members for mailing list.
 
-    use JSON::XS; # auto export 'encode_json'
+    use JSON; # auto export 'encode_json'
 
     # add members
     my $res = $mailgun->add_list_members('ml@example.com' => {
