@@ -14,7 +14,7 @@ use HTTP::Request::Common;
 use File::Temp;
 
 
-our $VERSION = "0.12";
+our $VERSION = "0.13";
 our $API_BASE = 'api.mailgun.net/v3';
 
 use Class::Accessor::Lite (

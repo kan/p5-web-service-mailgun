@@ -73,7 +73,7 @@
          "web" : "https://github.com/kan/p5-web-service-mailgun"
       }
    },
-   "version" : "0.12",
+   "version" : "0.13",
    "x_contributors" : [
       "Josh Rabinowitz <joshr@joshr.com>",
       "justingit <perl@justinsimoni.com>"
