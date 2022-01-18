@@ -2,6 +2,9 @@ Revision history for Perl extension WebService-Mailgun
 
 {{$NEXT}}
 
+0.14 2022-01-18T01:37:50Z
+    - support API region (thanks bjornjac)
+
 0.13 2021-11-22T13:21:38Z
     - use JSON (thanks justingit)
 

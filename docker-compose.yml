@@ -5,6 +5,8 @@ services:
         volumes:
             - ./:/app
             - perl-local:/app/local
+        environment:
+            PERL5LIB: /app/local/lib/perl5
         tty: true
 volumes:
   perl-local:

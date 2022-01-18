@@ -14,7 +14,7 @@ use HTTP::Request::Common;
 use File::Temp;
 
 
-our $VERSION = "0.13";
+our $VERSION = "0.14";
 our $API_BASE = 'api.mailgun.net/v3';
 our $API_BASE_EU = 'api.eu.mailgun.net/v3';
 
