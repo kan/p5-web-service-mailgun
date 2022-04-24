@@ -316,9 +316,9 @@ sub add_template {
     elsif (ref($args) eq 'ARRAY') {
         @content = @$args;
     }
-	else {
-		die 'unsupport argument. add_template() need HashRef or ArrayRef.';
-	}
+    else {
+        die 'unsupport argument. add_template() need HashRef or ArrayRef.';
+    }
 
 	my $req = POST $self->domain_api_url('templates'), Content_type => 'form-data', Content => \@content;
 
