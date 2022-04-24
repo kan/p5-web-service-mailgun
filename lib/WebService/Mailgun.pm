@@ -320,10 +320,10 @@ sub add_template {
         die 'unsupport argument. add_template() need HashRef or ArrayRef.';
     }
 
-	my $req = POST $self->domain_api_url('templates'), Content_type => 'form-data', Content => \@content;
+    my $req = POST $self->domain_api_url('templates'), Content_type => 'form-data', Content => \@content;
 
-	my $res = $self->client->request($req);
-	$self->decode_response($res);
+    my $res = $self->client->request($req);
+    $self->decode_response($res);
 }
 
 1;
