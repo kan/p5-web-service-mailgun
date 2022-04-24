@@ -583,6 +583,38 @@ Get stored message.
 
 L<Stored Message|https://documentation.mailgun.com/en/latest/api-sending.html#retrieving-stored-messages>
 
+=head2 add_template($args)
+
+Add a template
+
+    # add template
+    my $res = $mailgun->add_template({
+        name        => 'welcome',     # Template name
+        template    => 'Hello!',      # Template data
+        engine      => 'handlebars',  # Template engine (optional)
+        description => 'xyz',         # Description of template (optional)
+        tag         => '2.0' ,        # Version tag (optional)
+        comment     => 'Test'         # Version comment (optional)
+    });
+
+L<https://documentation.mailgun.com/en/latest/api-templates.html#templates>
+
+=head2 delete_templates()
+
+Delete all templates
+
+    my $res = $mailgun->delete_templates();
+
+L<https://documentation.mailgun.com/en/latest/api-templates.html#templates>
+
+=head2 delete_template($name)
+
+Delete a template
+
+    my $res = $mailgun->delete_template($name);
+
+L<https://documentation.mailgun.com/en/latest/api-templates.html#templates>
+
 =head1 Event Pooling
 
 event method return previous url. it can use for fetch event.
@@ -594,6 +626,8 @@ event method return previous url. it can use for fetch event.
     // ...
 
 L<Event Polling|https://documentation.mailgun.com/en/latest/api-events.html#event-polling>    
+
+
 
 =head1 TODO
 
@@ -614,6 +648,8 @@ this API not implement yet.
 =item * L<Webhooks|https://documentation.mailgun.com/en/latest/api-webhooks.html>
 
 =item * L<Email Validation|https://documentation.mailgun.com/en/latest/api-email-validation.html>
+
+=item * L<Templates|https://documentation.mailgun.com/en/latest/api-templates.html> (partial)
 
 =back
 
