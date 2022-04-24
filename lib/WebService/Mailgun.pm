@@ -291,6 +291,41 @@ sub get_message_from_event {
     $self->decode_response($res);
 }
 
+sub delete_templates {
+    my ($self) = @_;
+
+    my $res = $self->client->delete($self->domain_api_url("templates"));
+    $self->decode_response($res);
+}
+
+sub delete_template {
+    my ($self, $name) = @_;
+
+    my $res = $self->client->delete(
+        $self->domain_api_url("templates/$name"));
+    $self->decode_response($res);
+}
+
+sub add_template {
+    my ($self, $args) = @_;
+
+    my @content;
+    if (ref($args) eq 'HASH') {
+        @content = %$args;
+    }
+    elsif (ref($args) eq 'ARRAY') {
+        @content = @$args;
+    }
+	else {
+		die 'unsupport argument. add_template() need HashRef or ArrayRef.';
+	}
+
+	my $req = POST $self->domain_api_url('templates'), Content_type => 'form-data', Content => \@content;
+
+	my $res = $self->client->request($req);
+	$self->decode_response($res);
+}
+
 1;
 __END__
 
