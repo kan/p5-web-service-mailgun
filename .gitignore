@@ -35,3 +35,4 @@ MYMETA.*
 
 .envrc
 docker-compose-local.yml
+.pause
