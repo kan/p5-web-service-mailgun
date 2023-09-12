@@ -2,7 +2,7 @@ Revision history for Perl extension WebService-Mailgun
 
 {{$NEXT}}
 
-0.15.1 2023-09-12T09:27:19Z
+0.16 2023-09-12T09:33:42Z
     - fix document
 
 0.15 2022-05-08T14:09:01Z
