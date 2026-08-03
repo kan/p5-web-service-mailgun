@@ -5,9 +5,14 @@ use WebService::Mailgun;
 use JSON;
 use String::Random;
 
+my ($api_key, $domain) = @ENV{qw/MAILGUN_API_KEY MAILGUN_DOMAIN/};
+
+plan skip_all => 'set MAILGUN_API_KEY and MAILGUN_DOMAIN to run this test'
+    unless $api_key && $domain;
+
 my $mailgun = WebService::Mailgun->new(
-    api_key => 'key-389807c554fdfe0a7757adf0650f7768',
-    domain  => 'sandbox56435abd76e84fa6b03de82540e11271.mailgun.org',
+    api_key => $api_key,
+    domain  => $domain,
     RaiseError => 1,
 );
 
@@ -119,4 +124,3 @@ subtest 'get events' => sub {
 =cut
 
 done_testing;
-
