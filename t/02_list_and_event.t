@@ -5,7 +5,17 @@ use WebService::Mailgun;
 use JSON;
 use String::Random;
 
-my ($api_key, $domain) = @ENV{qw/MAILGUN_API_KEY MAILGUN_DOMAIN/};
+# credentials are embedded into the request URL, so surrounding spaces
+# (e.g. a trailing newline in a CI secret) must be stripped here.
+sub env ($) {
+    my $value = $ENV{$_[0]};
+    return unless defined $value;
+    $value =~ s/\A\s+|\s+\z//g;
+    return $value;
+}
+
+my ($api_key, $domain, $region) =
+    map { env $_ } qw/MAILGUN_API_KEY MAILGUN_DOMAIN MAILGUN_REGION/;
 
 plan skip_all => 'set MAILGUN_API_KEY and MAILGUN_DOMAIN to run this test'
     unless $api_key && $domain;
@@ -13,6 +23,7 @@ plan skip_all => 'set MAILGUN_API_KEY and MAILGUN_DOMAIN to run this test'
 my $mailgun = WebService::Mailgun->new(
     api_key => $api_key,
     domain  => $domain,
+    region  => $region,
     RaiseError => 1,
 );
 
