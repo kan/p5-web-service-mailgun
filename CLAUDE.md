@@ -165,16 +165,21 @@ GitHub Release を作る。仕組みと落ちたときの扱いは `scripts/tagp
 ### ページング (`recursive`)
 
 Mailgun の `*/pages` 系と events は `paging.next` を辿る。`recursive` は items が空になるまで
-next を辿って全件を集め、`(\@items, $previous_uri)` の **2 要素リスト** を返す。
-返り値が 2 つなので呼び出し側はリストで受ける (`my ($lists) = $mailgun->lists();`)。スカラーで
-受けると `$previous_uri` が入る。POD の「Lists of every page」に利用者向けの説明がある。
-途中のページで失敗しても `undef` は返さず、それまでに集めた分を返す (POD の「Errors」)。
+next を辿って全件を集め、`(\@items, $next_uri)` の **2 要素リスト** を返す。`$next_uri` は
+空のページの `paging.next`。途中で失敗したときは、失敗したページの URL (渡し直せば続きから取れる。
+`undef` にすると、`event(undef)` が条件なしで全件を取り直してしまう)。返り値が 2 つなので呼び出し側はリストで受ける
+(`my ($lists) = $mailgun->lists();`)。スカラーで受けると `$next_uri` が入る。POD の
+「Lists of every page」に利用者向けの説明がある。途中のページで失敗しても `undef` は返さず、
+それまでに集めた分を返す (POD の「Errors」)。
 
 Mailgun が返す paging URL には認証情報が含まれないため、`$uri->userinfo('api:'.$self->api_key)` を
-毎回付け直している。`previous` URL は Event Polling 用にそのまま `event()` へ渡せる
-(`event($purl)` は URI か文字列をそのまま要求する経路。API キーを付けるので、https で `api_base()` の
-ホストの URL 以外は `croak` する)。空のページの `previous` を渡したときに新しいイベントだけが返るかは
-未確認 (Mailgun が案内するポーリングは `paging.next` を辿る)。
+毎回付け直している。`$next_uri` は Event Polling 用にそのまま `event()` へ渡せる
+(`event($url)` は URI か文字列をそのまま要求する経路。API キーを付けるので、https で `api_base()` の
+ホストの URL 以外は `croak` する)。
+
+- **2 つ目の戻り値を `paging.previous` に戻さない。** 空のページの `previous` は最後のページへ遡る
+  URL で、渡すと毎回最大 `limit` 件を取り直す。空のページの `next` なら、その後に保存された
+  イベントだけが返る (実 API で確かめた結果は #25)
 
 ### multipart/form-data 送信
 
