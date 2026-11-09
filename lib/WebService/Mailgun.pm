@@ -623,9 +623,11 @@ Delete member for mailing list.
 
 L<Delete a member of a mailing list|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/mailing-lists/delete-lists-list_address-members-member_address>
 
-=head2 event($args)
+=head2 event($args|$url)
 
-Get event data.
+Get event data. C<$args> is a hash reference of the query. In its place C<$url> (a L<URI> or a
+string) is fetched as it is, such as the second value an earlier call returned (see
+L</Event Polling>); it must be an https URL on the API's host, or C<event> dies.
 
     # get event data (every page; see "Lists of every page")
     my ($events, $purl) = $mailgun->event({ event => 'stored', limit => 50 });

@@ -310,9 +310,11 @@ my $res = $mailgun->delete_list_member('ml@example.com' => 'user@example.com');
 
 [Delete a member of a mailing list](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/mailing-lists/delete-lists-list_address-members-member_address)
 
-## event($args)
+## event($args|$url)
 
-Get event data.
+Get event data. `$args` is a hash reference of the query. In its place `$url` (a [URI](https://metacpan.org/pod/URI) or a
+string) is fetched as it is, such as the second value an earlier call returned (see
+["Event Polling"](#event-polling)); it must be an https URL on the API's host, or `event` dies.
 
 ```perl
 # get event data (every page; see "Lists of every page")
