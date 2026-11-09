@@ -54,7 +54,7 @@ sub recursive {
     $query //= {};
     $key //= 'items';
     my @result;
-    my $previous;
+    my $next;
     unless($api_uri) {
         $api_uri = URI->new($self->api_url($method));
         $api_uri->query_form($query);
@@ -63,11 +63,20 @@ sub recursive {
     while (1) {
         my $res = $self->client->get($api_uri->as_string);
         my $json = $self->decode_response($res);
-        unless($json && scalar @{$json->{$key}}) {
-            try {
-                $previous = URI->new($json->{paging}->{previous});
-                $previous->userinfo('api:'.$self->api_key);
-            } catch {};
+        unless ($json) {
+            # The request failed: return the URL of the page that failed, so that the caller can
+            # fetch the rest from there.
+            $next = $api_uri;
+            last;
+        }
+        unless (scalar @{$json->{$key}}) {
+            # paging.next of the empty page: where the items that come later will be. For events
+            # this is how Event Polling goes on (#25). paging.previous would point back over the
+            # last page and return it again.
+            if ($json->{paging} && $json->{paging}->{next}) {
+                $next = URI->new($json->{paging}->{next});
+                $next->userinfo('api:'.$self->api_key);
+            }
             last;
         }
         push @result, @{$json->{$key}};
@@ -75,7 +84,7 @@ sub recursive {
         $api_uri->userinfo('api:'.$self->api_key);
     }
 
-    return \@result, $previous;
+    return \@result, $next;
 }
 
 sub client {
@@ -278,7 +287,7 @@ sub event {
 
     my $api_url;
     if ((blessed($query) && $query->isa('URI')) || (defined $query && !ref $query)) {
-        # A URL (the previous URL an earlier call returned, for Event Polling) is fetched as it
+        # A URL (the next URL an earlier call returned, for Event Polling) is fetched as it
         # is. Mailgun's paging URLs carry no credentials, so the API key is set on it: only for
         # an https URL on the API's own host, so that the key is never sent anywhere else.
         $api_url = blessed($query) ? $query->clone : URI->new($query);
@@ -390,11 +399,13 @@ there shows only in C<error>, which keeps the message of the last failure until 
 =head2 Lists of every page
 
 C<lists>, C<list_members> and C<event> follow C<paging.next> until a page has no items, and
-return two values: an array reference of all the items, and the URL of the C<paging.previous>
-page as a L<URI> (for C<event>, see L</Event Polling>). Take the items in list context:
+return two values: an array reference of all the items, and the C<paging.next> URL of that
+empty page as a L<URI>, where the items that come later will be (for C<event>, see
+L</Event Polling>). When a request fails, the second value is the URL of the page that failed
+instead, so that the rest can be fetched from there. Take the items in list context:
 
     my ($lists) = $mailgun->lists();
-    my ($events, $previous) = $mailgun->event({ event => 'stored' });
+    my ($events, $next) = $mailgun->event({ event => 'stored', ascending => 'yes' });
 
 In scalar context they return the URL, not the items.
 
@@ -630,7 +641,7 @@ string) is fetched as it is, such as the second value an earlier call returned (
 L</Event Polling>); it must be an https URL on the API's host, or C<event> dies.
 
     # get event data (every page; see "Lists of every page")
-    my ($events, $purl) = $mailgun->event({ event => 'stored', limit => 50 });
+    my ($events, $next) = $mailgun->event({ event => 'stored', limit => 50 });
 
 L<Get events|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/events/get-v3-domain_name-events>
 
@@ -639,7 +650,7 @@ L<Get events|https://documentation.mailgun.com/docs/mailgun/api-reference/send/m
 Get stored message. C<$event> must be a C<stored> event; any other event dies.
 
     # get event data
-    my ($events, $purl) = $mailgun->event({ event => 'stored' });
+    my ($events) = $mailgun->event({ event => 'stored' });
     my $msg = $mailgun->get_message_from_event($events->[0]);
 
 L<Retrieve a stored email|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/messages/get-v3-domains--domain-name--messages--storage-key->
@@ -679,22 +690,29 @@ L<Delete a template|https://documentation.mailgun.com/docs/mailgun/api-reference
 
 =head1 Event Polling
 
-The second value C<event> returns is the C<paging.previous> URL of the last page it fetched (the
-first page with no items), as a L<URI> with the API key set. Pass it back to C<event> in place of
-the query to fetch from that URL, following C<paging.next> as before:
+The second value C<event> returns is the C<paging.next> URL of the empty page it stopped at, as a
+L<URI> with the API key set. Pass it back to C<event> in place of the query, and it returns the
+events stored since the last call, and the URL to use the next time:
 
     use Time::Piece;
 
-    my ($events, $purl) = $mailgun->event({
+    my ($events, $next) = $mailgun->event({
         event     => 'stored',
         begin     => localtime->epoch - 30 * 60,
         ascending => 'yes',
     });
-    # do something with @$events ...
-    ($events, $purl) = $mailgun->event($purl);
+    while (1) {
+        # do something with @$events ...
+        sleep 60;
+        ($events, $next) = $mailgun->event($next);
+    }
 
-Mailgun may store an event some time after it happens, so a page of recent events can still be
-missing some. The Mailgun documentation describes how to poll without missing them.
+Use C<< ascending => 'yes' >>, so that the URL points forward in time.
+
+Mailgun may store an event some time after it happens. Such an event can be dated before events
+already fetched, and the URL does not return it. If every event matters, fetch a time range
+again once it is old enough (Mailgun's documentation suggests half an hour), and drop the events
+whose C<id> was seen already.
 
 L<Event Polling|https://documentation.mailgun.com/docs/mailgun/user-manual/events/event-polling>
 

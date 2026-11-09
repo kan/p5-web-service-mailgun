@@ -48,12 +48,14 @@ there shows only in `error`, which keeps the message of the last failure until t
 ## Lists of every page
 
 `lists`, `list_members` and `event` follow `paging.next` until a page has no items, and
-return two values: an array reference of all the items, and the URL of the `paging.previous`
-page as a [URI](https://metacpan.org/pod/URI) (for `event`, see ["Event Polling"](#event-polling)). Take the items in list context:
+return two values: an array reference of all the items, and the `paging.next` URL of that
+empty page as a [URI](https://metacpan.org/pod/URI), where the items that come later will be (for `event`, see
+["Event Polling"](#event-polling)). When a request fails, the second value is the URL of the page that failed
+instead, so that the rest can be fetched from there. Take the items in list context:
 
 ```perl
 my ($lists) = $mailgun->lists();
-my ($events, $previous) = $mailgun->event({ event => 'stored' });
+my ($events, $next) = $mailgun->event({ event => 'stored', ascending => 'yes' });
 ```
 
 In scalar context they return the URL, not the items.
@@ -318,7 +320,7 @@ string) is fetched as it is, such as the second value an earlier call returned (
 
 ```perl
 # get event data (every page; see "Lists of every page")
-my ($events, $purl) = $mailgun->event({ event => 'stored', limit => 50 });
+my ($events, $next) = $mailgun->event({ event => 'stored', limit => 50 });
 ```
 
 [Get events](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/events/get-v3-domain_name-events)
@@ -329,7 +331,7 @@ Get stored message. `$event` must be a `stored` event; any other event dies.
 
 ```perl
 # get event data
-my ($events, $purl) = $mailgun->event({ event => 'stored' });
+my ($events) = $mailgun->event({ event => 'stored' });
 my $msg = $mailgun->get_message_from_event($events->[0]);
 ```
 
@@ -376,24 +378,31 @@ my $res = $mailgun->delete_template($name);
 
 # Event Polling
 
-The second value `event` returns is the `paging.previous` URL of the last page it fetched (the
-first page with no items), as a [URI](https://metacpan.org/pod/URI) with the API key set. Pass it back to `event` in place of
-the query to fetch from that URL, following `paging.next` as before:
+The second value `event` returns is the `paging.next` URL of the empty page it stopped at, as a
+[URI](https://metacpan.org/pod/URI) with the API key set. Pass it back to `event` in place of the query, and it returns the
+events stored since the last call, and the URL to use the next time:
 
 ```perl
 use Time::Piece;
 
-my ($events, $purl) = $mailgun->event({
+my ($events, $next) = $mailgun->event({
     event     => 'stored',
     begin     => localtime->epoch - 30 * 60,
     ascending => 'yes',
 });
-# do something with @$events ...
-($events, $purl) = $mailgun->event($purl);
+while (1) {
+    # do something with @$events ...
+    sleep 60;
+    ($events, $next) = $mailgun->event($next);
+}
 ```
 
-Mailgun may store an event some time after it happens, so a page of recent events can still be
-missing some. The Mailgun documentation describes how to poll without missing them.
+Use `ascending => 'yes'`, so that the URL points forward in time.
+
+Mailgun may store an event some time after it happens. Such an event can be dated before events
+already fetched, and the URL does not return it. If every event matters, fetch a time range
+again once it is old enough (Mailgun's documentation suggests half an hour), and drop the events
+whose `id` was seen already.
 
 [Event Polling](https://documentation.mailgun.com/docs/mailgun/user-manual/events/event-polling)
 
