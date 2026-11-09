@@ -14,7 +14,7 @@ permissions:
 # oldest the module declares (`use 5.020`, `requires 'perl'` in cpanfile). The versions in between
 # are covered by CPAN Testers after each release.
 #
-# **The jobs on 5.42 run in the perl:5.42 image from Docker Hub.** actions-setup-perl downloads
+# **The jobs on 5.44 run in the perl:5.44 image from Docker Hub.** actions-setup-perl downloads
 # Perl from GitHub Releases without a token, which fails with 504 whenever GitHub throttles
 # anonymous traffic (the GitHub incident of 2026-11-09). Only `oldest-perl` still uses it: the
 # perl images that work on the current runners start at 5.26 (perl:5.20 is in the schema 1
@@ -23,9 +23,9 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: perl 5.42
+    name: perl 5.44
     container:
-      image: perl:5.42
+      image: perl:5.44
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -67,12 +67,12 @@ jobs:
 
   # The tarball that publish.yml uploads, made the same way ("Build the tarball" there; change both
   # together), so that what goes into the distribution is checked before a release: scripts/ must
-  # stay out (minil.toml). The one difference is where Perl 5.42 comes from: publish.yml gets it
+  # stay out (minil.toml). The one difference is where Perl 5.44 comes from: publish.yml gets it
   # from actions-setup-perl (see there).
   dist:
     runs-on: ubuntu-latest
     container:
-      image: perl:5.42
+      image: perl:5.44
     steps:
       # The whole history, as in publish.yml: Minilla makes x_contributors from `git log`.
       - uses: actions/checkout@v7.0.1
