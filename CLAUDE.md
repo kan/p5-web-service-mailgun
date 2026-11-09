@@ -10,35 +10,33 @@ CPAN モジュール `WebService::Mailgun` — Mailgun API (https://mailgun.com/
 
 ## 開発コマンド
 
-ローカルに Perl 環境を作らず `docker-compose.yml` の perl-cpm イメージを使う想定:
+ローカルに Perl 環境を作らず、`docker-compose.yml` のコンテナを使う想定。イメージは repo の
+`Dockerfile` (公式の `perl:5.42` に cpm を足したもの) からビルドされる。主なコマンドは次のとおり。
 
 ```sh
-docker compose run --rm perl cpm install          # cpanfile から依存を local/ に導入
-docker compose run --rm perl prove -lr t          # 全テスト
-docker compose run --rm perl prove -lv t/01_message.t   # 単体テスト (verbose)
+docker compose run --rm perl cpm install --with-develop   # cpanfile から依存を local/ に導入
+docker compose run --rm perl prove -lr t                  # 全テスト
+docker compose run --rm perl prove -lv t/01_message.t     # 単体テスト (verbose)
+docker compose run --rm perl minil build                  # 生成物の作り直し (下)
 ```
+
+- コンテナはホストのユーザー (既定は uid / gid 1000) で動くので、書き出したファイルは root 所有に
+  ならない。ホストの uid が 1000 でなければ、repo 直下の `.env` (`.gitignore` 済み、compose が自動で
+  読む) に `HOST_UID=<uid>` と `HOST_GID=<gid>` を書き、`docker compose build` からやり直す。
+  ボリュームの所有者は作ったときの uid のまま変わらないので、作った後なら
+  `docker compose down -v` で消してから入れ直す
+- 依存は名前付きボリューム `perl-local-5.42` に入る。Perl の版を上げるときは、`Dockerfile` と一緒に
+  ボリューム名も変える (別の版でビルドした XS モジュールは読み込めない)。前のボリュームは
+  `docker volume rm p5-web-service-mailgun_<前の名前>` で消す (perl-cpm のころのものは
+  `p5-web-service-mailgun_perl-local`)
+- 依存の版は固定しない (`cpanfile.snapshot` を置かない)。CI も CPAN の利用者も、その時点の最新を入れる
 
 ローカルに依存が入っている場合は `prove -lr t` / `prove -lv t/04_mime.t` を直接実行してよい。
 
 ### 生成物の作り直し (`minil build`)
 
 `minil build` は POD から `README.md` を、`cpanfile` と `minil.toml` から `META.json` / `Build.PL` を作り直す。
-**`docker-compose.yml` のコンテナでは動かない。** そのイメージの Minilla (v3.1.8) は `minil.toml` の
-`manage_changes = false` を知らず、無くなった `Changes` を読みに行って落ちる。新しい Minilla は
-そのイメージの git (2.20) では `git ls-files --recurse-submodules` が通らずに落ちる。次のように公式の `perl:5.38` イメージで実行する。
 
-```sh
-mkdir -p ~/.cache/minil-perl
-docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/h \
-  -v "$PWD:/app" -v "$HOME/.cache/minil-perl:/tmp/l" -w /app perl:5.38 bash -c '
-  mkdir -p /tmp/h && git config --global --add safe.directory "*" &&
-  cpanm -q -n -L /tmp/l Minilla Pod::Markdown::Github Module::Build::Tiny > /dev/null &&
-  PERL5LIB=/tmp/l/lib/perl5 /tmp/l/bin/minil build'
-```
-
-- **`--user "$(id -u):$(id -g)"` を必ず付ける。** root で実行すると生成物や `.build/` が root 所有に
-  なり、ホスト側の git 操作が壊れる
-- Minilla は `~/.cache/minil-perl` に入るので、2 回目からは入れ直さない
 - **POD、`cpanfile`、`minil.toml` を変えたら、同じ PR で `minil build` を実行し、作り直された
   `README.md` / `META.json` も一緒にコミットする。** リリース PR は `META.json` の版しか変えない。
   ここで作り直さないと、repo の `README.md` が古いまま残る。配布物の中のものは、`publish.yml` の
