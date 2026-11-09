@@ -34,6 +34,7 @@ MYMETA.*
 !META.json
 
 .envrc
+/.env
 docker-compose-local.yml
 .pause
 .env.mailgun

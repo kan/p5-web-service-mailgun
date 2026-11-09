@@ -17,10 +17,9 @@ on 'test' => sub {
 };
 
 on 'develop' => sub {
-    requires 'Minilla';
+    # v3.2.0: manage_changes in minil.toml (the change log is CHANGELOG.md)
+    requires 'Minilla', 'v3.2.0';
     requires 'Pod::Markdown::Github';
-    requires 'Version::Next';
-    requires 'CPAN::Uploader';
     requires 'Test::CPAN::Meta';
     requires 'Test::MinimumVersion::Fast';
     requires 'Test::PAUSE::Permissions';
