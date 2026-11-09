@@ -1,4 +1,4 @@
-[![Actions Status](https://github.com/kan/p5-web-service-mailgun/workflows/test/badge.svg)](https://github.com/kan/p5-web-service-mailgun/actions)
+[![Actions Status](https://github.com/kan/p5-web-service-mailgun/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/kan/p5-web-service-mailgun/actions?workflow=test)
 # NAME
 
 WebService::Mailgun - API client for Mailgun ([https://mailgun.com/](https://mailgun.com/))
