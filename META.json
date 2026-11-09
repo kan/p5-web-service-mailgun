@@ -78,7 +78,7 @@
          "web" : "https://github.com/kan/p5-web-service-mailgun"
       }
    },
-   "version" : "0.17.0",
+   "version" : "1.0.0",
    "x_contributors" : [
       "Bjorn <bjornjac@gmail.com>",
       "Josh Rabinowitz <joshr@joshr.com>",
