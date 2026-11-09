@@ -7,6 +7,8 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-09
+
 - Version numbers have three parts from 1.0.0 on (`1.0.1`, `1.1.0`), and the change log moves from `Changes` to `CHANGELOG.md` (#16)
 - Remove a contributor's e-mail address from the distribution metadata (`x_contributors` in `META.json` / `META.yml`) (#14)
 - Stop shipping `cpanfile.snapshot` in the distribution: it pinned the dependencies to versions from 2021, and neither `cpanm` nor CPAN clients read it
@@ -96,6 +98,7 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 
 - Original version
 
+[1.0.0]: https://github.com/kan/p5-web-service-mailgun/releases/tag/v1.0.0
 [0.17]: https://metacpan.org/release/MIKIHOSHI/WebService-Mailgun-0.17
 [0.16]: https://metacpan.org/release/MIKIHOSHI/WebService-Mailgun-0.16
 [0.15]: https://metacpan.org/release/MIKIHOSHI/WebService-Mailgun-0.15
