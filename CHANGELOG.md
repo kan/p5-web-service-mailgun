@@ -7,6 +7,8 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-09
+
 - Do not list the bots that commit to the repository (github-actions for the release pull requests, Dependabot) as contributors in the distribution metadata (`x_contributors`); 1.0.0 listed github-actions
 
 ## [1.0.0] - 2026-11-09
@@ -100,6 +102,7 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 
 - Original version
 
+[1.0.1]: https://github.com/kan/p5-web-service-mailgun/releases/tag/v1.0.1
 [1.0.0]: https://github.com/kan/p5-web-service-mailgun/releases/tag/v1.0.0
 [0.17]: https://metacpan.org/release/MIKIHOSHI/WebService-Mailgun-0.17
 [0.16]: https://metacpan.org/release/MIKIHOSHI/WebService-Mailgun-0.16
