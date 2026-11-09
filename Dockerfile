@@ -1,6 +1,6 @@
 # Development image: the official perl image with cpm. Used by docker-compose.yml;
 # not part of the distribution (minil.toml excludes it).
-FROM perl:5.42
+FROM perl:5.44
 
 # The uid and gid of the host user, so that local/, .build/ and the files minil build
 # writes are owned by the host user. docker-compose.yml passes the same values.
