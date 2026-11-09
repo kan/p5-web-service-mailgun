@@ -11,7 +11,7 @@ CPAN モジュール `WebService::Mailgun` — Mailgun API (https://mailgun.com/
 ## 開発コマンド
 
 ローカルに Perl 環境を作らず、`docker-compose.yml` のコンテナを使う想定。イメージは repo の
-`Dockerfile` (公式の `perl:5.42` に cpm を足したもの) からビルドされる。主なコマンドは次のとおり。
+`Dockerfile` (公式の `perl:5.44` に cpm を足したもの) からビルドされる。主なコマンドは次のとおり。
 
 ```sh
 docker compose run --rm perl cpm install --with-develop   # cpanfile から依存を local/ に導入
@@ -25,7 +25,7 @@ docker compose run --rm perl minil build                  # 生成物の作り�
   読む) に `HOST_UID=<uid>` と `HOST_GID=<gid>` を書き、`docker compose build` からやり直す。
   ボリュームの所有者は作ったときの uid のまま変わらないので、作った後なら
   `docker compose down -v` で消してから入れ直す
-- 依存は名前付きボリューム `perl-local-5.42` に入る。Perl の版を上げるときは、`Dockerfile` と一緒に
+- 依存は名前付きボリューム `perl-local-5.44` に入る。Perl の版を上げるときは、`Dockerfile` と一緒に
   ボリューム名も変える (別の版でビルドした XS モジュールは読み込めない)。前のボリュームは
   `docker volume rm p5-web-service-mailgun_<前の名前>` で消す (perl-cpm のころのものは
   `p5-web-service-mailgun_perl-local`)
@@ -76,7 +76,7 @@ docker compose run --rm \
 
 | workflow | 起動 | 内容 |
 | --- | --- | --- |
-| `test.yml` | `master` への push、PR | perl 5.42 のテスト (`test`、Docker Hub の `perl:5.42` のコンテナ、実 API を叩くのはこのジョブだけ)、宣言の最低版 5.20 のテスト (`oldest-perl`、actions-setup-perl、secret を渡さない)、`minil dist` の tarball に `scripts/` が入らないかの確認 (`dist`)、`scripts/tagpr/` と呼ぶ SHA の一致の確認 (`tagpr-subtree`) |
+| `test.yml` | `master` への push、PR | perl 5.44 のテスト (`test`、Docker Hub の `perl:5.44` のコンテナ、実 API を叩くのはこのジョブだけ)、宣言の最低版 5.20 のテスト (`oldest-perl`、actions-setup-perl、secret を渡さない)、`minil dist` の tarball に `scripts/` が入らないかの確認 (`dist`)、`scripts/tagpr/` と呼ぶ SHA の一致の確認 (`tagpr-subtree`) |
 | `verify-lockfile.yml` | `master` への push、PR | `actions.lock` の検証 |
 | `tagpr.yml` / `tagpr-label.yml` / `publish.yml` | リリース | 下の「リリース」 |
 
@@ -219,7 +219,7 @@ Furl クライアントは `client()` で遅延生成し `_client` にキャッ�
 - 実 API を叩くテストは、`test.yml` の `test` ジョブ 1 つでだけ走らせる。メールの送信が sandbox の
   送信上限を使うため。版を足すときも secret を渡すジョブは増やさない。間の版は、リリース後の
   CPAN Testers で確かめられる
-- **5.42 のジョブは Docker Hub の `perl:5.42` のコンテナで動かす。** actions-setup-perl は Perl を
+- **5.44 のジョブは Docker Hub の `perl:5.44` のコンテナで動かす。** actions-setup-perl は Perl を
   GitHub Releases から認証なしでダウンロードするので、GitHub が匿名のアクセスを絞ると 504 で落ちる
   (2026-11-09 の GitHub の障害)。`oldest-perl` と `publish.yml` の build だけは actions-setup-perl の
   まま。今の runner で使える `perl` のイメージは 5.26 以降だけで (5.20 は schema 1 で pull できず、
