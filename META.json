@@ -53,7 +53,7 @@
             "Scalar::Util" : "0",
             "Try::Tiny" : "0",
             "URI" : "0",
-            "perl" : "5.010000"
+            "perl" : "5.010"
          }
       },
       "test" : {

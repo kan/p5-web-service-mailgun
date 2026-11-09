@@ -166,8 +166,9 @@ GitHub Release を作る。仕組みと落ちたときの扱いは `scripts/tagp
 
 Mailgun の `*/pages` 系と events は `paging.next` を辿る。`recursive` は items が空になるまで
 next を辿って全件を集め、`(\@items, $previous_uri)` の **2 要素リスト** を返す。
-返り値が 2 つなので呼び出し側は `my ($lists, undef) = $mailgun->lists();` と受ける必要がある
-(POD の例は 1 つで受けている箇所があり実態と食い違う)。
+返り値が 2 つなので呼び出し側はリストで受ける (`my ($lists) = $mailgun->lists();`)。スカラーで
+受けると `$previous_uri` が入る。POD の「Lists of every page」に利用者向けの説明がある。
+途中のページで失敗しても `undef` は返さず、それまでに集めた分を返す (POD の「Errors」)。
 
 Mailgun が返す paging URL には認証情報が含まれないため、`$uri->userinfo('api:'.$self->api_key)` を
 毎回付け直している。`previous` URL は Event Polling 用にそのまま `event()` へ渡せる
