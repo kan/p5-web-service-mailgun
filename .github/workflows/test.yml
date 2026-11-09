@@ -10,62 +10,78 @@ on:
 permissions:
   contents: read
 
+# Two Perls, as in kan/coveralls-perl: the one of the development container (Dockerfile), and the
+# oldest the module declares (`use 5.020`, `requires 'perl'` in cpanfile). The versions in between
+# are covered by CPAN Testers after each release.
+#
+# **The jobs on 5.42 run in the perl:5.42 image from Docker Hub.** actions-setup-perl downloads
+# Perl from GitHub Releases without a token, which fails with 504 whenever GitHub throttles
+# anonymous traffic (the GitHub incident of 2026-11-09). Only `oldest-perl` still uses it: the
+# perl images that work on the current runners start at 5.26 (perl:5.20 is in the schema 1
+# manifest format, which their Docker can no longer pull, and 5.22 / 5.24 have a glibc too old
+# for the Node 24 that actions/checkout runs on). When it fails with 504, re-run the failed jobs.
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      # Let each version report its own result instead of cancelling the other on a failure.
-      fail-fast: false
-      matrix:
-        include:
-          # The Perl of the development container (Dockerfile). **Only this one calls the real
-          # Mailgun API** (`api: true`): t/01 and t/04 send mail and t/02 creates mailing lists,
-          # so each job given the secrets uses up the sandbox's sending limit.
-          - perl-version: '5.42'
-            api: true
-          # The oldest Perl the module declares (`use 5.010`, `requires 'perl'` in cpanfile).
-          # Without the secrets only t/00_compile.t and t/03_error.t run: the code compiles and
-          # the error path works. The dependencies are the latest releases, as `cpanm` gives a
-          # user on 5.10; if one of them drops 5.10, this fails without a change here, and the
-          # oldest Perl has to be decided again.
-          - perl-version: '5.10'
-            api: false
-    # The versions in between are covered by CPAN Testers after each release.
-    name: perl ${{ matrix.perl-version }}
+    name: perl 5.42
+    container:
+      image: perl:5.42
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: perl -V
+        run: perl -V
+      - name: install dependencies
+        run: cpanm --notest --installdeps .
+      - name: run tests
+        # **Only this job calls the real Mailgun API.** t/01 and t/04 send mail and t/02 creates
+        # mailing lists, so each job given the secrets uses up the sandbox's sending limit.
+        # The tests are skipped when the secrets are not available (e.g. pull requests from forks).
+        env:
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
+          MAILGUN_TO: ${{ secrets.MAILGUN_TO }}
+          # set this secret to "eu" when the domain belongs to the EU region
+          MAILGUN_REGION: ${{ secrets.MAILGUN_REGION }}
+        run: prove -lr t
+
+  # The oldest Perl the module declares. With no Mailgun secrets, only the tests that need no
+  # network run (t/00_compile.t, t/03_error.t, t/05_event_url.t). The dependencies are the latest
+  # releases, as `cpanm` gives a user on 5.20; if one of them drops 5.20, this fails without a
+  # change here, and the oldest Perl has to be decided again.
+  oldest-perl:
+    runs-on: ubuntu-latest
+    name: perl 5.20
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - uses: shogo82148/actions-setup-perl@v1.44.4
         with:
-          perl-version: ${{ matrix.perl-version }}
+          perl-version: '5.20'
       - name: install dependencies
         run: cpanm --notest --installdeps .
       - name: run tests
-        # The tests that call the real API are skipped when these are empty: on `api: false`, and
-        # when the secrets are not available (e.g. pull requests from forks, Dependabot).
-        env:
-          MAILGUN_API_KEY: ${{ matrix.api && secrets.MAILGUN_API_KEY || '' }}
-          MAILGUN_DOMAIN: ${{ matrix.api && secrets.MAILGUN_DOMAIN || '' }}
-          MAILGUN_TO: ${{ matrix.api && secrets.MAILGUN_TO || '' }}
-          # set this secret to "eu" when the domain belongs to the EU region
-          MAILGUN_REGION: ${{ matrix.api && secrets.MAILGUN_REGION || '' }}
         run: prove -lr t
 
   # The tarball that publish.yml uploads, made the same way ("Build the tarball" there; change both
   # together), so that what goes into the distribution is checked before a release: scripts/ must
-  # stay out (minil.toml).
+  # stay out (minil.toml). The one difference is where Perl 5.42 comes from: publish.yml gets it
+  # from actions-setup-perl (see there).
   dist:
     runs-on: ubuntu-latest
+    container:
+      image: perl:5.42
     steps:
       # The whole history, as in publish.yml: Minilla makes x_contributors from `git log`.
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: shogo82148/actions-setup-perl@v1.44.4
-        with:
-          perl-version: '5.42'
+      # The checkout belongs to another user than the container's root, and Minilla runs git.
+      - name: Configure git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       # Only what `minil dist` needs: Minilla, the markdown_maker of minil.toml, and
       # Module::Build::Tiny for the Build.PL it runs.
       - name: Install Minilla

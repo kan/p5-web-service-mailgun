@@ -100,7 +100,11 @@ jobs:
           retention-days: 7
           overwrite: true
 
-      # The Perl of the `test` job of test.yml.
+      # The Perl version of the `test` job of test.yml. That job runs in the perl:5.42 image from
+      # Docker Hub; this one gets Perl from actions-setup-perl, which downloads it from GitHub
+      # Releases without a token and fails with 504 when GitHub throttles anonymous traffic
+      # (CLAUDE.md). It fails before anything is uploaded, so re-run the failed jobs then.
+      # A container here would also need Node for the checks above.
       - uses: shogo82148/actions-setup-perl@v1.44.4
         with:
           perl-version: '5.42'

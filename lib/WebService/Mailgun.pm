@@ -1,7 +1,7 @@
 package WebService::Mailgun;
 
 
-use 5.010;
+use 5.020;
 use strict;
 use warnings;
 

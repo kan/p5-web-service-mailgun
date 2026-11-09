@@ -7,7 +7,7 @@ requires 'Try::Tiny';
 requires 'HTTP::Request::Common';
 requires 'File::Temp';
 requires 'Scalar::Util';
-requires 'perl', '5.010000';
+requires 'perl', '5.020000';
 
 on 'test' => sub {
     requires 'Test::More', '0.98';
