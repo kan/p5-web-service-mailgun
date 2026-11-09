@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## リポジトリ概要
 
 CPAN モジュール `WebService::Mailgun` — Mailgun API (https://mailgun.com/) の Perl クライアント。
-実装はほぼ `lib/WebService/Mailgun.pm` の 1 ファイル (約 330 行 + POD)。ビルド/リリースは Minilla 管理。
+実装はほぼ `lib/WebService/Mailgun.pm` の 1 ファイル (約 330 行 + POD)。ビルドは Minilla、
+リリースは tagpr (下の「リリース」)。
 
 ## 開発コマンド
 
@@ -19,13 +20,30 @@ docker compose run --rm perl prove -lv t/01_message.t   # 単体テスト (verbo
 
 ローカルに依存が入っている場合は `prove -lr t` / `prove -lv t/04_mime.t` を直接実行してよい。
 
-Minilla 経由:
+### 生成物の作り直し (`minil build`)
+
+`minil build` は POD から `README.md` を、`cpanfile` と `minil.toml` から `META.json` / `Build.PL` を作り直す。
+**`docker-compose.yml` のコンテナでは動かない。** そのイメージの Minilla (v3.1.8) は `minil.toml` の
+`manage_changes = false` を知らず、無くなった `Changes` を読みに行って落ちる。新しい Minilla は
+そのイメージの git (2.20) では `git ls-files --recurse-submodules` が通らずに落ちる。次のように公式の `perl:5.38` イメージで実行する。
 
 ```sh
-minil test      # xt/ の author test 込み (Test::Pod, Test::Spellunker 等)
-minil build     # 配布物生成 (README.md / META.json / Build.PL を再生成)
-minil release   # バージョン確定 + Changes 更新 + CPAN upload + git tag
+mkdir -p ~/.cache/minil-perl
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/h \
+  -v "$PWD:/app" -v "$HOME/.cache/minil-perl:/tmp/l" -w /app perl:5.38 bash -c '
+  mkdir -p /tmp/h && git config --global --add safe.directory "*" &&
+  cpanm -q -n -L /tmp/l Minilla Pod::Markdown::Github Module::Build::Tiny > /dev/null &&
+  PERL5LIB=/tmp/l/lib/perl5 /tmp/l/bin/minil build'
 ```
+
+- **`--user "$(id -u):$(id -g)"` を必ず付ける。** root で実行すると生成物や `.build/` が root 所有に
+  なり、ホスト側の git 操作が壊れる
+- Minilla は `~/.cache/minil-perl` に入るので、2 回目からは入れ直さない
+- **POD、`cpanfile`、`minil.toml` を変えたら、同じ PR で `minil build` を実行し、作り直された
+  `README.md` / `META.json` も一緒にコミットする。** リリース PR は `META.json` の版しか変えない。
+  ここで作り直さないと、repo の `README.md` が古いまま残る。配布物の中のものは、`publish.yml` の
+  `minil dist` が作り直す
+- `minil release` は使わない (版を上げてタグを打つのは tagpr の役目)
 
 ### テストは実 API を叩く / 認証情報は環境変数
 
@@ -52,56 +70,79 @@ docker compose run --rm \
 
 ### CI
 
-`.github/workflows/test.yml` で perl 5.30〜5.38 のマトリクス実行 (`shogo82148/actions-setup-perl`)。
-上記 3 つの環境変数は GitHub Secrets (`MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `MAILGUN_TO`) から渡す。
-fork からの PR では secret が渡らないため実 API テストは自動的にスキップされる。
-Travis CI と coveralls は廃止済み。
+| workflow | 起動 | 内容 |
+| --- | --- | --- |
+| `test.yml` | `master` への push、PR | perl 5.30〜5.38 のテスト (`test`)、`minil dist` の tarball に `scripts/` が入らないかの確認 (`dist`)、`scripts/tagpr/` と呼ぶ SHA の一致の確認 (`tagpr-subtree`) |
+| `verify-lockfile.yml` | `master` への push、PR | `actions.lock` の検証 |
+| `tagpr.yml` / `tagpr-label.yml` / `publish.yml` | リリース | 下の「リリース」 |
 
-## リリース手順 (docker コンテナで実行する場合)
+- テストの 3 つの環境変数は GitHub Secrets (`MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `MAILGUN_TO`) から
+  渡す。fork からの PR では secret が渡らないため実 API テストは自動的にスキップされる
+- action の版は `.github/workflows/actions.lock` で固定している。**`uses:` の行を変えたら、repo の
+  ルートで `gh actions-lock` を実行し、書き換わった workflow と lockfile を一緒にコミットする。**
+  lockfile を手で編集しない。Dependabot の更新 PR は lockfile も書き換える
+- Travis CI と coveralls は廃止済み
 
-ローカルに Minilla は入っていない。コンテナ内で完結させるための前提と手順は以下 (0.17 リリースで検証済み)。
+## 運用
 
-```sh
-docker compose run --rm perl cpm install --with-develop   # Minilla 等の develop 依存を local/ へ
-```
+- **`master` へ直接 push しない。** ブランチを切って PR で入れる。tagpr はマージされた PR から
+  リリース PR を組み立てるため、直接 push した変更はリリースの流れから漏れる
+- tagpr のリリース PR では CI が走らない (`GITHUB_TOKEN` で作られた PR は workflow を起動しない)。
+  リリース PR の版と CHANGELOG は、tagpr の run の中で `release-prepare.mjs` が確かめる
 
-### コンテナで git を動かすための制約
+## リリース
 
-- コンテナの git は **2.20** で、ホストの `~/.gitconfig` にある `gpg.format = ssh` (git 2.34 以降) を
-  解釈できず全 git コマンドが fatal で止まる。最小限の `user.name` / `user.email` だけを書いた
-  専用 HOME を用意してマウントする
-- ホストの uid は コンテナの `/etc/passwd` に存在せず、ssh が `No user exists for uid 1000` で失敗する。
-  `/etc/passwd` を ro マウントすれば解決する
-- root で実行すると `.git` や生成物が root 所有になり、以後ホスト側の git 操作が壊れる。
-  必ず `--user "$(id -u):$(id -g)"` を付ける
+リリースは tagpr で行う。`master` への push ごとに `tagpr.yml` がリリース PR を作り直し、
+それをマージするとタグ (`vX.Y.Z`) が打たれ、`publish.yml` が CPAN (PAUSE) へアップロードして
+GitHub Release を作る。仕組みと落ちたときの扱いは `scripts/tagpr/README.md` の「The tagpr workflow」。
 
-```sh
-mkdir -p ~/.minilla-docker/.ssh && chmod 700 ~/.minilla-docker/.ssh
-printf '[user]\n\tname = <NAME>\n\temail = <EMAIL>\n' > ~/.minilla-docker/.gitconfig
-ssh-keyscan -t ed25519,rsa github.com > ~/.minilla-docker/.ssh/known_hosts 2>/dev/null
+1. 変更は PR で入れる。**利用者に見える変更の PR は、`CHANGELOG.md` の `## [Unreleased]` の下に
+   1 行を足す。** その節がそのままリリースノートになる。外部の貢献者の変更には既存の行にならって
+   `(thanks <名前>)` を付ける。リンクは行の中に書く (参照リンクの定義は節の外にあり、
+   リリースノートではリンクにならない)。見出しや末尾のリンクの形は `scripts/tagpr/README.md` の
+   「What the CHANGELOG has to look like」
+2. `master` へマージされるたびに、リリース PR (ブランチ `tagpr-from-v<前の版>`) が作り直される。
+   リリース PR は `Mailgun.pm` の `$VERSION` と `META.json` の版を上げ、`## [Unreleased]` を
+   その版の節に変える
+3. 出したくなったら、リリース PR の中身 (版と CHANGELOG の節) を確かめてマージする
+   - **tagpr の run が赤いリリース PR はマージしない** (落ちた run がリリース PR を draft にする)
+   - 版の上がり方はラベルで決まる。`enhancement` の PR が入っていれば minor、それ以外は patch。
+     変えたいときはリリース PR に `tagpr:minor` / `tagpr:major` を付ける。`tagpr-label.yml` が
+     リリース PR を draft にして作り直し、ready に戻す。ready に戻るのを待ってからマージする
+4. マージすると tagpr がタグを打ち、`publish.yml` がテストして tarball を作り、PAUSE へ
+   アップロードしてから GitHub Release を作る
+5. PAUSE から届く索引のメールを確かめる
 
-docker compose run --rm --user "$(id -u):$(id -g)" \
-  -e HOME=/home/<USER> -e PATH=/app/local/bin:/usr/local/bin:/usr/bin:/bin \
-  -v "$HOME/.minilla-docker:/home/<USER>" -v /etc/passwd:/etc/passwd:ro \
-  perl <command>
-```
+**PAUSE へのアップロードは取り消せない。** 同じファイル名は二度と受け付けられないので、壊れた版を
+出したら版を上げて出し直す。
 
-### 分割リリース (コミットをホスト側で行う場合)
+- **版を手で変えない。** 版は `Mailgun.pm` の `our $VERSION` と `META.json` にあり、どちらも
+  リリース PR で tagpr が上げる (`.tagpr` の `versionFile`)
+- **版は 3 つ組 (`1.0.1`、`1.1.0`) にする。** 0.x の 3 つ組は数値にすると 0.17 より小さくなり
+  (0.18.0 は 0.018000)、PAUSE の索引に載らない。tagpr での最初のリリースを 1.0.0 にし (#16、
+  最初のリリース PR に `tagpr:major`)、以後は 3 つ組のまま上げる
+- **`scripts/tagpr/` を手で編集しない。** 変えるときは kan/tagpr-scripts を直し、
+  `git subtree pull -S --prefix=scripts/tagpr https://github.com/kan/tagpr-scripts.git main --squash` で
+  取り込む。同じ PR で `tagpr.yml` と `tagpr-label.yml` の `uses: kan/tagpr-scripts/...@<SHA>` を、
+  squash のコミットの `git-subtree-split` の SHA へ上げる。食い違いは `test.yml` の `tagpr-subtree`
+  ジョブが落とす。**この PR はマージコミットでマージする** (squash すると次の subtree pull が壊れる)
+- PAUSE の認証情報は GitHub の `cpan` environment の secret (`PAUSE_USER` / `PAUSE_PASSWORD`) にある。
+  PAUSE ID は `MIKIHOSHI`。repo のルートに `.pause` があってもコミットしない (`.gitignore` 済み)
+- `0.17` 以前のタグは Minilla が打った `v` 無しの 2 つ組。tagpr は `vX.Y.Z` しか見ないので、
+  0.17 のコミット (fc9825d) に起点として `v0.17.0` を annotated で打ってある
+- **`Mailgun.pm` と `META.json` の版は、移行の PR で `0.17` から `0.17.0` に揃えてある。** tagpr は
+  前のタグの版の文字列 (`0.17.0`) を `versionFile` から探して置き換えるので、`0.17` のままだと
+  何も書き換わらない。`0.17.0` は数値にすると 0.017000 で 0.17 より小さいが、CPAN へは出さない
+  (最初のリリース PR で 1.0.0 にする)
 
-`minil release` は `BumpVersion → CheckChanges → RegenerateFiles → DistTest → MakeDist →
-UploadToCPAN → RewriteChanges → Commit → Tag` の固定ステップで、**コミットだけ飛ばすオプションはない**
-(あるのは `--no-test` / `--trial` / `--dry-run` / `--pause-config`)。ホストの署名設定でコミットしたい場合は
-bump と Changes を手で確定させ、`minil dist` + `cpan-upload` に分割する。
+### 最初に一度だけ要る設定
 
-1. `lib/WebService/Mailgun.pm` の `$VERSION` を上げる
-2. `Changes` の `{{$NEXT}}` の直後に空行 + `<version> <YYYY-MM-DDThh:mm:ssZ>` の見出しを挿入する
-   (`{{$NEXT}}` 自体は残す。Minilla の RewriteChanges と同じ形)
-3. コンテナで `minil dist` — `README.md` / `META.json` / `Build.PL` を再生成し、`xt/` 込みの
-   dist テストを実行して tarball を作る
-4. コンテナで `cpan-upload -u <PAUSE_ID> /app/<dist>.tar.gz` (パスワードは対話入力。
-   `minil release` を使う場合は `~/.pause` かリポジトリ直下の `.pause` が必須で、無いと die する)
-5. ホストで `git commit -m "release version <version>"` → `git tag <version>` →
-   `git push origin master` → `git push origin tag <version>`。タグ名はバージョン番号そのまま
+- 起点のタグ `v0.17.0` を push する (`.tagpr` を `master` へ入れるより前)。無いと tagpr は前の版を
+  0.0.0 と見て、版のファイルを書き換えられない
+- Settings → Actions → General の「Allow GitHub Actions to create and approve pull requests」を
+  有効にする (無いと最初の tagpr の run が 403 で落ちる)
+- Settings → Environments に `cpan` を作り、secret `PAUSE_USER` (`MIKIHOSHI`) と `PAUSE_PASSWORD` を置く
+- ラベル `tagpr:major` を作る (最初のリリース PR に付ける)
 
 ## アーキテクチャ
 
@@ -152,12 +193,12 @@ Furl クライアントは `client()` で遅延生成し `_client` にキャッ�
 
 ## 変更時の注意
 
-- **README.md は POD から自動生成** される (`Pod::Markdown::Github`、`minil build` 時)。
+- **README.md は POD から自動生成** される (`Pod::Markdown::Github`)。
   ドキュメント修正は `lib/WebService/Mailgun.pm` の POD 側を直すこと。README を直接編集しない。
+  作り直し方は上記「生成物の作り直し」。
 - `Build.PL` / `META.json` も Minilla 生成物。手で編集しない。
 - 依存追加は `cpanfile` に書く (`META.json` ではなく)。
-- バージョンは `lib/WebService/Mailgun.pm` の `our $VERSION`、履歴は `Changes` の `{{$NEXT}}` 直下に追記。
-  リリース手順は上記「リリース手順」を参照。
+- 版と履歴 (`CHANGELOG.md`) の扱いは上記「リリース」を参照。
 - 最低 Perl バージョンはモジュール内 `use 5.008001` に対し cpanfile は `perl 5.010000` 要求という
   食い違いがある。`Test::MinimumVersion::Fast` (author test) が絡むので触るときは両方を見ること。
 - 未実装 API (Domains / Stats / Tags / Suppressions / Routes / Webhooks / Email Validation、
