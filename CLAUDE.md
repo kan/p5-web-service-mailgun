@@ -72,7 +72,7 @@ docker compose run --rm \
 
 | workflow | 起動 | 内容 |
 | --- | --- | --- |
-| `test.yml` | `master` への push、PR | perl 5.42 と、宣言の最低版 5.10 のテスト (`test`。実 API を叩くのは 5.42 だけ)、`minil dist` の tarball に `scripts/` が入らないかの確認 (`dist`)、`scripts/tagpr/` と呼ぶ SHA の一致の確認 (`tagpr-subtree`) |
+| `test.yml` | `master` への push、PR | perl 5.42 のテスト (`test`、Docker Hub の `perl:5.42` のコンテナ、実 API を叩くのはこのジョブだけ)、宣言の最低版 5.20 のテスト (`oldest-perl`、actions-setup-perl、secret を渡さない)、`minil dist` の tarball に `scripts/` が入らないかの確認 (`dist`)、`scripts/tagpr/` と呼ぶ SHA の一致の確認 (`tagpr-subtree`) |
 | `verify-lockfile.yml` | `master` への push、PR | `actions.lock` の検証 |
 | `tagpr.yml` / `tagpr-label.yml` / `publish.yml` | リリース | 下の「リリース」 |
 
@@ -207,12 +207,19 @@ Furl クライアントは `client()` で遅延生成し `_client` にキャッ�
 - `Build.PL` / `META.json` も Minilla 生成物。手で編集しない。
 - 依存追加は `cpanfile` に書く (`META.json` ではなく)。
 - 版と履歴 (`CHANGELOG.md`) の扱いは上記「リリース」を参照。
-- **最低の Perl は 5.10。** モジュールの `use 5.010`、cpanfile の `requires 'perl', '5.010000'`、
-  `test.yml` のマトリクスの最低版は一緒に変え、`minil build` で `META.json` も作り直す。5.12 以降の構文や機能 (`package NAME VERSION`、
-  `package NAME BLOCK`、`...`、`s///r`、配列への `each` / `keys` など) は使わない。`//`、`say`、`state` は
-  使ってよい (`use 5.010` が有効にする)
-- 実 API を叩くテストは、`test.yml` のマトリクスの 1 行 (`api: true`) でだけ走らせる。メールの送信が
-  sandbox の送信上限を使うため。版を足すときも `api: true` の行は増やさない。間の版は、リリース後の
+- **最低の Perl は 5.20** (kan/coveralls-perl と同じ)。モジュールの `use 5.020`、cpanfile の
+  `requires 'perl', '5.020000'`、`test.yml` の `oldest-perl` の版は一緒に変え、`minil build` で
+  `META.json` も作り直す。5.22 以降の構文や機能 (`<<>>`、`<<~` のヒアドキュメント、`isa` 演算子など) は
+  使わない。5.20 で experimental の postfix deref (`$ref->@*`) とサブルーチンのシグネチャも使わない。
+  `//`、`say`、`state`、`s///r` は使ってよい
+- 実 API を叩くテストは、`test.yml` の `test` ジョブ 1 つでだけ走らせる。メールの送信が sandbox の
+  送信上限を使うため。版を足すときも secret を渡すジョブは増やさない。間の版は、リリース後の
   CPAN Testers で確かめられる
+- **5.42 のジョブは Docker Hub の `perl:5.42` のコンテナで動かす。** actions-setup-perl は Perl を
+  GitHub Releases から認証なしでダウンロードするので、GitHub が匿名のアクセスを絞ると 504 で落ちる
+  (2026-11-09 の GitHub の障害)。`oldest-perl` と `publish.yml` の build だけは actions-setup-perl の
+  まま。今の runner で使える `perl` のイメージは 5.26 以降だけで (5.20 は schema 1 で pull できず、
+  5.22 / 5.24 は glibc が古く actions/checkout の Node 24 が動かない)、publish.yml はコンテナにすると
+  Node も用意し直すことになるため。504 で落ちたら `gh run rerun <run-id> --failed` で再実行する
 - 未実装 API (Domains / Stats / Tags / Suppressions / Routes / Webhooks / Email Validation、
   Templates は部分実装) は POD の TODO セクションに列挙されている。実装したら POD の TODO も更新する。
