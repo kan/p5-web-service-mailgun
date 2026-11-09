@@ -29,6 +29,10 @@ docker compose run --rm perl minil build                  # 生成物の作り�
   ボリューム名も変える (別の版でビルドした XS モジュールは読み込めない)。前のボリュームは
   `docker volume rm p5-web-service-mailgun_<前の名前>` で消す (perl-cpm のころのものは
   `p5-web-service-mailgun_perl-local`)
+- **Perl の版は、`Dockerfile` の `FROM`、`test.yml` の `perl:<版>` のイメージ (`test` と `dist`)、
+  `publish.yml` の `perl-version`、`docker-compose.yml` のボリューム名で揃える。** Dependabot
+  (`dependabot.yml` の `docker`) が PR で上げるのは `Dockerfile` だけなので、その PR を取り込むときは
+  残りも同じ PR で手で上げる。CI が古い版のまま通っても、新しい版を試したことにはならない
 - 依存の版は固定しない (`cpanfile.snapshot` を置かない)。CI も CPAN の利用者も、その時点の最新を入れる
 
 ローカルに依存が入っている場合は `prove -lr t` / `prove -lv t/04_mime.t` を直接実行してよい。
