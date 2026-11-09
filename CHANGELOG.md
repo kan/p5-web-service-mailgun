@@ -10,6 +10,7 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 - Version numbers have three parts from 1.0.0 on (`1.0.1`, `1.1.0`), and the change log moves from `Changes` to `CHANGELOG.md` (#16)
 - Remove a contributor's e-mail address from the distribution metadata (`x_contributors` in `META.json` / `META.yml`) (#14)
 - Stop shipping `cpanfile.snapshot` in the distribution: it pinned the dependencies to versions from 2021, and neither `cpanm` nor CPAN clients read it
+- Declare Perl 5.10 in the module (`use 5.010`), the version the code and `META.json` already required. On Perl 5.8 it now fails with a version error instead of a syntax error
 
 ## [0.17] - 2026-08-03
 

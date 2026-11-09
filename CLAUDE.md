@@ -70,7 +70,7 @@ docker compose run --rm \
 
 | workflow | 起動 | 内容 |
 | --- | --- | --- |
-| `test.yml` | `master` への push、PR | perl 5.30〜5.38 のテスト (`test`)、`minil dist` の tarball に `scripts/` が入らないかの確認 (`dist`)、`scripts/tagpr/` と呼ぶ SHA の一致の確認 (`tagpr-subtree`) |
+| `test.yml` | `master` への push、PR | perl 5.42 と、宣言の最低版 5.10 のテスト (`test`。実 API を叩くのは 5.42 だけ)、`minil dist` の tarball に `scripts/` が入らないかの確認 (`dist`)、`scripts/tagpr/` と呼ぶ SHA の一致の確認 (`tagpr-subtree`) |
 | `verify-lockfile.yml` | `master` への push、PR | `actions.lock` の検証 |
 | `tagpr.yml` / `tagpr-label.yml` / `publish.yml` | リリース | 下の「リリース」 |
 
@@ -197,7 +197,12 @@ Furl クライアントは `client()` で遅延生成し `_client` にキャッ�
 - `Build.PL` / `META.json` も Minilla 生成物。手で編集しない。
 - 依存追加は `cpanfile` に書く (`META.json` ではなく)。
 - 版と履歴 (`CHANGELOG.md`) の扱いは上記「リリース」を参照。
-- 最低 Perl バージョンはモジュール内 `use 5.008001` に対し cpanfile は `perl 5.010000` 要求という
-  食い違いがある。`Test::MinimumVersion::Fast` (author test) が絡むので触るときは両方を見ること。
+- **最低の Perl は 5.10。** モジュールの `use 5.010`、cpanfile の `requires 'perl', '5.010000'`、
+  `test.yml` のマトリクスの最低版は一緒に変え、`minil build` で `META.json` も作り直す。5.12 以降の構文や機能 (`package NAME VERSION`、
+  `package NAME BLOCK`、`...`、`s///r`、配列への `each` / `keys` など) は使わない。`//`、`say`、`state` は
+  使ってよい (`use 5.010` が有効にする)
+- 実 API を叩くテストは、`test.yml` のマトリクスの 1 行 (`api: true`) でだけ走らせる。メールの送信が
+  sandbox の送信上限を使うため。版を足すときも `api: true` の行は増やさない。間の版は、リリース後の
+  CPAN Testers で確かめられる
 - 未実装 API (Domains / Stats / Tags / Suppressions / Routes / Webhooks / Email Validation、
   Templates は部分実装) は POD の TODO セクションに列挙されている。実装したら POD の TODO も更新する。
