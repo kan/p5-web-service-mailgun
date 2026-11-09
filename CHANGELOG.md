@@ -8,6 +8,7 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 ## [Unreleased]
 
 - Version numbers have three parts from 1.0.0 on (`1.0.1`, `1.1.0`), and the change log moves from `Changes` to `CHANGELOG.md` (#16)
+- Remove a contributor's e-mail address from the distribution metadata (`x_contributors` in `META.json` / `META.yml`) (#14)
 
 ## [0.17] - 2026-08-03
 

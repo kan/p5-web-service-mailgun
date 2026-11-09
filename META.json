@@ -4,13 +4,13 @@
       "Kan Fushihara <kan.fushihara@gmail.com>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Minilla/v3.1.8, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "Minilla/v3.3.2",
    "license" : [
       "perl_5"
    ],
    "meta-spec" : {
       "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
-      "version" : 2
+      "version" : "2"
    },
    "name" : "WebService-Mailgun",
    "no_index" : {
@@ -75,7 +75,7 @@
       "homepage" : "https://github.com/kan/p5-web-service-mailgun",
       "repository" : {
          "type" : "git",
-         "url" : "git://github.com/kan/p5-web-service-mailgun.git",
+         "url" : "https://github.com/kan/p5-web-service-mailgun.git",
          "web" : "https://github.com/kan/p5-web-service-mailgun"
       }
    },
@@ -83,8 +83,8 @@
    "x_contributors" : [
       "Bjorn <bjornjac@gmail.com>",
       "Josh Rabinowitz <joshr@joshr.com>",
-      "justingit <perl@justinsimoni.com>"
+      "justingit <39739+justingit@users.noreply.github.com>"
    ],
-   "x_serialization_backend" : "JSON::PP version 4.02",
+   "x_serialization_backend" : "JSON::PP version 4.16",
    "x_static_install" : 1
 }

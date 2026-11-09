@@ -1,0 +1,3 @@
+# Minilla builds x_contributors of META.json from `git log --format="%aN <%aE>"`,
+# which applies this file. Map addresses that must not be published (#14).
+justingit <39739+justingit@users.noreply.github.com> <perl@justinsimoni.com>
