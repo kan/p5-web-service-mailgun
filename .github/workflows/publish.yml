@@ -100,10 +100,10 @@ jobs:
           retention-days: 7
           overwrite: true
 
-      # The newest Perl of the test.yml matrix.
+      # The Perl of the `test` job of test.yml.
       - uses: shogo82148/actions-setup-perl@v1.44.4
         with:
-          perl-version: '5.38'
+          perl-version: '5.42'
       # The dependencies of the tests, and of `minil dist` (Minilla, the markdown_maker of
       # minil.toml, and Module::Build::Tiny for the Build.PL of its module_maker; cpanfile has no
       # configure phase). Not the rest of the develop prerequisites: they are author tests.

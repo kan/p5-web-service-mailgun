@@ -14,14 +14,23 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      # Let each version report its own result instead of cancelling the other on a failure.
       fail-fast: false
       matrix:
-        perl-version:
-          - '5.30'
-          - '5.32'
-          - '5.34'
-          - '5.36'
-          - '5.38'
+        include:
+          # The Perl of the development container (Dockerfile). **Only this one calls the real
+          # Mailgun API** (`api: true`): t/01 and t/04 send mail and t/02 creates mailing lists,
+          # so each job given the secrets uses up the sandbox's sending limit.
+          - perl-version: '5.42'
+            api: true
+          # The oldest Perl the module declares (`use 5.010`, `requires 'perl'` in cpanfile).
+          # Without the secrets only t/00_compile.t and t/03_error.t run: the code compiles and
+          # the error path works. The dependencies are the latest releases, as `cpanm` gives a
+          # user on 5.10; if one of them drops 5.10, this fails without a change here, and the
+          # oldest Perl has to be decided again.
+          - perl-version: '5.10'
+            api: false
+    # The versions in between are covered by CPAN Testers after each release.
     name: perl ${{ matrix.perl-version }}
     steps:
       - uses: actions/checkout@v7.0.1
@@ -33,14 +42,14 @@ jobs:
       - name: install dependencies
         run: cpanm --notest --installdeps .
       - name: run tests
-        # Tests that call the real Mailgun API are skipped when these secrets
-        # are not available (e.g. pull requests from forks).
+        # The tests that call the real API are skipped when these are empty: on `api: false`, and
+        # when the secrets are not available (e.g. pull requests from forks, Dependabot).
         env:
-          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
-          MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
-          MAILGUN_TO: ${{ secrets.MAILGUN_TO }}
+          MAILGUN_API_KEY: ${{ matrix.api && secrets.MAILGUN_API_KEY || '' }}
+          MAILGUN_DOMAIN: ${{ matrix.api && secrets.MAILGUN_DOMAIN || '' }}
+          MAILGUN_TO: ${{ matrix.api && secrets.MAILGUN_TO || '' }}
           # set this secret to "eu" when the domain belongs to the EU region
-          MAILGUN_REGION: ${{ secrets.MAILGUN_REGION }}
+          MAILGUN_REGION: ${{ matrix.api && secrets.MAILGUN_REGION || '' }}
         run: prove -lr t
 
   # The tarball that publish.yml uploads, made the same way ("Build the tarball" there; change both
@@ -56,7 +65,7 @@ jobs:
           fetch-depth: 0
       - uses: shogo82148/actions-setup-perl@v1.44.4
         with:
-          perl-version: '5.38'
+          perl-version: '5.42'
       # Only what `minil dist` needs: Minilla, the markdown_maker of minil.toml, and
       # Module::Build::Tiny for the Build.PL it runs.
       - name: Install Minilla
