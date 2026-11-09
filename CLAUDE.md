@@ -63,7 +63,9 @@ docker compose run --rm \
 **テストにキーや個人のメールアドレスをハードコードしないこと** (以前ハードコードされていた
 キーは失効済み)。ネットワーク非依存なのは `t/00_compile.t` と、パッケージ変数
 `$WebService::Mailgun::API_BASE` を存在しないホストへ差し替えてエラー経路だけを見る
-`t/03_error.t` (ダミーの認証情報で動く)。実 API を叩くテストの失敗は、キー失効や
+`t/03_error.t` (ダミーの認証情報で動く)、HTTP クライアント (`$mailgun->{_client}`) を差し替えて
+組み立てた URL を見る `t/05_event_url.t`。URL の組み立てを確かめるテストは、この差し替えで書く。
+実 API を叩くテストの失敗は、キー失効や
 ネットワーク不通が原因のこともあるので即コードのバグと判断しないこと。
 
 ### CI
@@ -169,7 +171,9 @@ next を辿って全件を集め、`(\@items, $previous_uri)` の **2 要素リ�
 
 Mailgun が返す paging URL には認証情報が含まれないため、`$uri->userinfo('api:'.$self->api_key)` を
 毎回付け直している。`previous` URL は Event Polling 用にそのまま `event()` へ渡せる
-(`event($purl)` は URI をそのまま使う経路)。
+(`event($purl)` は URI か文字列をそのまま要求する経路。API キーを付けるので、https で `api_base()` の
+ホストの URL 以外は `croak` する)。空のページの `previous` を渡したときに新しいイベントだけが返るかは
+未確認 (Mailgun が案内するポーリングは `paging.next` を辿る)。
 
 ### multipart/form-data 送信
 

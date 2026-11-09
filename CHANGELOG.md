@@ -11,6 +11,7 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 - Remove a contributor's e-mail address from the distribution metadata (`x_contributors` in `META.json` / `META.yml`) (#14)
 - Stop shipping `cpanfile.snapshot` in the distribution: it pinned the dependencies to versions from 2021, and neither `cpanm` nor CPAN clients read it
 - Declare Perl 5.10 in the module (`use 5.010`), the version the code and `META.json` already required. On Perl 5.8 it now fails with a version error instead of a syntax error
+- Fix `event($url)`: since 0.07 it ignored the URL it was given (such as the second value an earlier `event()` returned) and fetched the first page of every event again. It now fetches the URL, which can be a `URI` or a string, and dies unless it is an https URL on the API's host, so that the API key is not sent anywhere else
 
 ## [0.17] - 2026-08-03
 
