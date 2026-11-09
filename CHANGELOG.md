@@ -7,6 +7,8 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 
 ## [Unreleased]
 
+- Do not list the bots that commit to the repository (github-actions for the release pull requests, Dependabot) as contributors in the distribution metadata (`x_contributors`); 1.0.0 listed github-actions
+
 ## [1.0.0] - 2026-11-09
 
 - Version numbers have three parts from 1.0.0 on (`1.0.1`, `1.1.0`), and the change log moves from `Changes` to `CHANGELOG.md` (#16)
