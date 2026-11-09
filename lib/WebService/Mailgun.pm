@@ -10,6 +10,7 @@ use JSON;
 use URI;
 use Try::Tiny;
 use Carp;
+use Scalar::Util qw(blessed);
 use HTTP::Request::Common;
 use File::Temp;
 
@@ -275,8 +276,21 @@ sub delete_list_member {
 sub event {
     my ($self, $query) = @_;
 
-    my $api_url = URI->new($self->domain_api_url("events"));
-    $api_url->query_form($query);
+    my $api_url;
+    if ((blessed($query) && $query->isa('URI')) || (defined $query && !ref $query)) {
+        # A URL (the previous URL an earlier call returned, for Event Polling) is fetched as it
+        # is. Mailgun's paging URLs carry no credentials, so the API key is set on it: only for
+        # an https URL on the API's own host, so that the key is never sent anywhere else.
+        $api_url = blessed($query) ? $query->clone : URI->new($query);
+        my ($host) = split m{/}, $self->api_base;
+        unless (($api_url->scheme // '') eq 'https' && lc($api_url->host) eq lc($host)) {
+            croak "event() takes a query hash reference or an https URL on $host, not '$query'";
+        }
+        $api_url->userinfo('api:'.$self->api_key);
+    } else {
+        $api_url = URI->new($self->domain_api_url("events"));
+        $api_url->query_form($query);
+    }
     return $self->recursive("events", {}, "items", $api_url);
 }
 
