@@ -30,7 +30,7 @@ docker compose run --rm perl minil build                  # 生成物の作り�
   `docker volume rm p5-web-service-mailgun_<前の名前>` で消す (perl-cpm のころのものは
   `p5-web-service-mailgun_perl-local`)
 - **Perl の版は、`Dockerfile` の `FROM`、`test.yml` の `perl:<版>` のイメージ (`test` と `dist`)、
-  `publish.yml` の `perl-version`、`docker-compose.yml` のボリューム名で揃える。** Dependabot
+  `publish.yml` の `with:` の `perl-version`、`docker-compose.yml` のボリューム名で揃える。** Dependabot
   (`dependabot.yml` の `docker`) が PR で上げるのは `Dockerfile` だけなので、その PR を取り込むときは
   残りも同じ PR で手で上げる。CI が古い版のまま通っても、新しい版を試したことにはならない
 - 依存の版は固定しない (`cpanfile.snapshot` を置かない)。CI も CPAN の利用者も、その時点の最新を入れる
@@ -43,8 +43,8 @@ docker compose run --rm perl minil build                  # 生成物の作り�
 
 - **POD、`cpanfile`、`minil.toml` を変えたら、同じ PR で `minil build` を実行し、作り直された
   `README.md` / `META.json` も一緒にコミットする。** リリース PR は `META.json` の版しか変えない。
-  ここで作り直さないと、repo の `README.md` が古いまま残る。配布物の中のものは、`publish.yml` の
-  `minil dist` が作り直す
+  ここで作り直さないと、repo の `README.md` が古いまま残る。配布物の中のものは、`publish.yml` が
+  呼ぶ共通の workflow (`publish-cpan.yml`) の `minil dist` が作り直す
 - `minil release` は使わない (版を上げてタグを打つのは tagpr の役目)
 
 ### テストは実 API を叩く / 認証情報は環境変数
@@ -99,6 +99,10 @@ docker compose run --rm \
 リリースは tagpr で行う。`master` への push ごとに `tagpr.yml` がリリース PR を作り直し、
 それをマージするとタグ (`vX.Y.Z`) が打たれ、`publish.yml` が CPAN (PAUSE) へアップロードして
 GitHub Release を作る。仕組みと落ちたときの扱いは `scripts/tagpr/README.md` の「The tagpr workflow」。
+`publish.yml` は kan/tagpr-scripts の共通の workflow `publish-cpan.yml` を呼ぶだけ。ジョブの中身と
+落ちたときの扱いは `scripts/tagpr/README.md` の「The CPAN publish workflow」にある。ジョブは
+`publish / Build and check`、`publish / Upload to PAUSE`、`publish / Create the GitHub release` の 3 つ。
+`uses:` の SHA は `tagpr.yml` / `tagpr-label.yml` と同じく、subtree を取り込む PR で上げる。
 
 1. 変更は PR で入れる。**利用者に見える変更の PR は、`CHANGELOG.md` の `## [Unreleased]` の下に
    1 行を足す。** その節がそのままリリースノートになる。外部の貢献者の変更には既存の行にならって
@@ -113,8 +117,9 @@ GitHub Release を作る。仕組みと落ちたときの扱いは `scripts/tagp
    - 版の上がり方はラベルで決まる。`enhancement` の PR が入っていれば minor、それ以外は patch。
      変えたいときはリリース PR に `tagpr:minor` / `tagpr:major` を付ける。`tagpr-label.yml` が
      リリース PR を draft にして作り直し、ready に戻す。ready に戻るのを待ってからマージする
-4. マージすると tagpr がタグを打ち、`publish.yml` がテストして tarball を作り、PAUSE へ
-   アップロードしてから GitHub Release を作る
+4. マージすると tagpr がタグを打ち、`publish.yml` が起動する。`Build and check` がテストして
+   tarball を作り、`Upload to PAUSE` が PAUSE へアップロードし、`Create the GitHub release` が
+   GitHub Release を作る
 5. PAUSE から届く索引のメールを確かめる
 
 **PAUSE へのアップロードは取り消せない。** 同じファイル名は二度と受け付けられないので、壊れた版を
@@ -127,7 +132,7 @@ GitHub Release を作る。仕組みと落ちたときの扱いは `scripts/tagp
   最初のリリース PR に `tagpr:major`)、以後は 3 つ組のまま上げる
 - **`scripts/tagpr/` を手で編集しない。** 変えるときは kan/tagpr-scripts を直し、
   `git subtree pull -S --prefix=scripts/tagpr https://github.com/kan/tagpr-scripts.git main --squash` で
-  取り込む。同じ PR で `tagpr.yml` と `tagpr-label.yml` の `uses: kan/tagpr-scripts/...@<SHA>` を、
+  取り込む。同じ PR で `tagpr.yml`、`tagpr-label.yml`、`publish.yml` の `uses: kan/tagpr-scripts/...@<SHA>` を、
   squash のコミットの `git-subtree-split` の SHA へ上げる。食い違いは `test.yml` の `tagpr-subtree`
   ジョブが落とす。**この PR はマージコミットでマージする** (squash すると次の subtree pull が壊れる)
 - PAUSE の認証情報は GitHub の `cpan` environment の secret (`PAUSE_USER` / `PAUSE_PASSWORD`) にある。
@@ -221,9 +226,13 @@ Furl クライアントは `client()` で遅延生成し `_client` にキャッ�
   CPAN Testers で確かめられる
 - **5.44 のジョブは Docker Hub の `perl:5.44` のコンテナで動かす。** actions-setup-perl は Perl を
   GitHub Releases から認証なしでダウンロードするので、GitHub が匿名のアクセスを絞ると 504 で落ちる
-  (2026-11-09 の GitHub の障害)。`oldest-perl` と `publish.yml` の build だけは actions-setup-perl の
-  まま。今の runner で使える `perl` のイメージは 5.26 以降だけで (5.20 は schema 1 で pull できず、
-  5.22 / 5.24 は glibc が古く actions/checkout の Node 24 が動かない)、publish.yml はコンテナにすると
-  Node も用意し直すことになるため。504 で落ちたら `gh run rerun <run-id> --failed` で再実行する
+  (2026-11-09 の GitHub の障害)。actions-setup-perl のままなのは次の 2 つ。
+  - `oldest-perl`: 今の runner で使える `perl` のイメージは 5.26 以降だけ (5.20 は schema 1 で
+    pull できず、5.22 / 5.24 は glibc が古く actions/checkout の Node 24 が動かない)
+  - `publish.yml` が呼ぶ共通の workflow の `Build and check`: 共通の workflow がコンテナを使わない
+    (検査に Node も要る)。この actions-setup-perl の版は、この repo の `actions.lock` ではなく
+    kan/tagpr-scripts の側で固定される
+  - どちらも 504 で落ちたら `gh run rerun <run-id> --failed` で再実行する。publish の
+    `Build and check` は PAUSE へ送る前に落ちるので、再実行してよい
 - 未実装 API (Domains / Stats / Tags / Suppressions / Routes / Webhooks / Email Validation、
   Templates は部分実装) は POD の TODO セクションに列挙されている。実装したら POD の TODO も更新する。

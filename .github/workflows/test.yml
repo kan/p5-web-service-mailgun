@@ -65,16 +65,17 @@ jobs:
       - name: run tests
         run: prove -lr t
 
-  # The tarball that publish.yml uploads, made the same way ("Build the tarball" there; change both
-  # together), so that what goes into the distribution is checked before a release: scripts/ must
-  # stay out (minil.toml). The one difference is where Perl 5.44 comes from: publish.yml gets it
-  # from actions-setup-perl (see there).
+  # The tarball that publish.yml uploads, made the same way as the "Build the tarball" step of the
+  # shared workflow it calls (scripts/tagpr/.github/workflows/publish-cpan.yml; `minil dist
+  # --no-test`), so that what goes into the distribution is checked before a release: scripts/ must
+  # stay out (minil.toml). The one difference is where Perl 5.44 comes from: the shared workflow
+  # gets it from actions-setup-perl, whose version is pinned in tagpr-scripts, not here.
   dist:
     runs-on: ubuntu-latest
     container:
       image: perl:5.44
     steps:
-      # The whole history, as in publish.yml: Minilla makes x_contributors from `git log`.
+      # The whole history, as in the shared workflow: Minilla makes x_contributors from `git log`.
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
@@ -96,7 +97,11 @@ jobs:
             exit 1
           fi
 
-  # scripts/tagpr/ must be the tagpr-scripts commit that tagpr.yml calls (scripts/tagpr/README.md).
+  # scripts/tagpr/ must be the tagpr-scripts commit that tagpr.yml, tagpr-label.yml and publish.yml
+  # call (scripts/tagpr/README.md).
+  #
+  # The tarball check of the shared publish workflow looks only for scripts/tagpr/; the `dist` job
+  # above looks for all of scripts/, so a file added elsewhere under scripts/ is caught here.
   tagpr-subtree:
     runs-on: ubuntu-latest
     steps:
