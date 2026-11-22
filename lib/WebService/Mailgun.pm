@@ -186,19 +186,45 @@ sub _path {
     } @segments;
 }
 
+# The keys of message() whose array reference is a file for HTTP::Request::Common
+# ([$path, $filename, ...]). An array reference under any other key is a list of values.
+my %FILE_KEYS = map { $_ => 1 } qw(attachment inline);
+
 sub message {
     my ($self, $args) = @_;
 
-    my @content;
+    my @pairs;
     if (ref($args) eq 'HASH') {
-        @content = %$args;
+        @pairs = %$args;
     }
     elsif (ref($args) eq 'ARRAY') {
-        @content = @$args;
+        @pairs = @$args;
     }
     else {
-        die 'unsupport argument. message() need HashRef or ArrayRef.';    
+        die 'unsupport argument. message() need HashRef or ArrayRef.';
 	}
+
+    # `to => ['a@example.com', 'b@example.com']` sends `to` twice, as Mailgun takes a key given
+    # more than once. HTTP::Request::Common would take the array reference for a file, and die
+    # opening a file named after the first address (#36).
+    # Under attachment and inline, an array reference of array references is several files.
+    my @content;
+    for (my $i = 0; $i < @pairs; $i += 2) {
+        my ($key, $value) = @pairs[$i, $i + 1];
+        if (ref $value ne 'ARRAY') {
+            push @content, $key => $value;
+            next;
+        }
+        # An empty list would leave the key out, and Mailgun would answer that it is missing.
+        croak "message(): '$key' is an empty array reference" unless @$value;
+        if (!$FILE_KEYS{$key}) {
+            push @content, map { ($key => $_) } @$value;
+        } elsif (ref $value->[0] eq 'ARRAY') {
+            push @content, map { ($key => $_) } @$value;
+        } else {
+            push @content, $key => $value;
+        }
+    }
 
     my $req = POST $self->domain_api_url('messages'), Content_type => 'form-data', Content => \@content;
 
@@ -513,8 +539,26 @@ Send email message.
         text    => 'text',
     });
 
-To pass the same key more than once (several attachments, say), pass an array reference of
-key-value pairs instead of a hash reference:
+To give a key several values, pass them in an array reference; the key is sent once for each:
+
+    my $res = $mailgun->message({
+        from    => 'foo@example.com',
+        to      => ['bar@example.com', 'baz@example.com'],
+        'o:tag' => ['newsletter', 'weekly'],
+        subject => 'test',
+        text    => 'text',
+    });
+
+An empty array reference dies, rather than leaving the key out.
+
+C<attachment> and C<inline> are the exception: there an array reference is a file
+(C<[$path]>, or C<[$path, $filename]>), as L<HTTP::Request::Common> takes it, and an array
+reference of those is several files:
+
+    attachment => [ ['/path/to/a.pdf'], ['/path/to/b.pdf', 'b.pdf'] ],
+
+The same can be passed as an array reference of key-value pairs instead of a hash reference,
+with the key given once for each file:
 
     my $res = $mailgun->message([
         from       => 'foo@example.com',
@@ -728,7 +772,8 @@ L<Retrieve a stored email|https://documentation.mailgun.com/docs/mailgun/api-ref
 =head2 add_template($args)
 
 Add a template. Like C<message>, it takes a hash reference or an array reference of key-value
-pairs.
+pairs. Unlike C<message>, an array reference as a value is always a file (C<[$path]>), as
+L<HTTP::Request::Common> takes it, such as the template read from a file.
 
     # add template
     my $res = $mailgun->add_template({

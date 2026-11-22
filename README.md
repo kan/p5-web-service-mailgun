@@ -102,8 +102,30 @@ my $res = $mailgun->message({
 });
 ```
 
-To pass the same key more than once (several attachments, say), pass an array reference of
-key-value pairs instead of a hash reference:
+To give a key several values, pass them in an array reference; the key is sent once for each:
+
+```perl
+my $res = $mailgun->message({
+    from    => 'foo@example.com',
+    to      => ['bar@example.com', 'baz@example.com'],
+    'o:tag' => ['newsletter', 'weekly'],
+    subject => 'test',
+    text    => 'text',
+});
+```
+
+An empty array reference dies, rather than leaving the key out.
+
+`attachment` and `inline` are the exception: there an array reference is a file
+(`[$path]`, or `[$path, $filename]`), as [HTTP::Request::Common](https://metacpan.org/pod/HTTP%3A%3ARequest%3A%3ACommon) takes it, and an array
+reference of those is several files:
+
+```perl
+attachment => [ ['/path/to/a.pdf'], ['/path/to/b.pdf', 'b.pdf'] ],
+```
+
+The same can be passed as an array reference of key-value pairs instead of a hash reference,
+with the key given once for each file:
 
 ```perl
 my $res = $mailgun->message([
@@ -346,7 +368,8 @@ my $msg = $mailgun->get_message_from_event($events->[0]);
 ## add\_template($args)
 
 Add a template. Like `message`, it takes a hash reference or an array reference of key-value
-pairs.
+pairs. Unlike `message`, an array reference as a value is always a file (`[$path]`), as
+[HTTP::Request::Common](https://metacpan.org/pod/HTTP%3A%3ARequest%3A%3ACommon) takes it, such as the template read from a file.
 
 ```perl
 # add template
