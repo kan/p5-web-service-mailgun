@@ -200,14 +200,17 @@ given is not changed, so the same one can be passed again.
 
 [Send a message in MIME format](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/messages/post-v3--domain-name--messages-mime)
 
-## lists()
+## lists($query)
 
-Get list of mailing lists.
+Get list of mailing lists. `$query` is an optional hash reference of the query, such as
+`limit`, the number of lists on a page (fewer requests for many lists).
 
 ```perl
 # get mailing lists (every page; see "Lists of every page")
 my ($lists) = $mailgun->lists();
 # => ArrayRef of mailing list object.
+
+my ($lists) = $mailgun->lists({ limit => 100 });
 ```
 
 [Get mailing lists](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/mailing-lists/get-v3-lists-pages)
@@ -266,13 +269,17 @@ my $res = $mailgun->delete_list('ml@example.com');
 
 [Delete a mailing list](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/mailing-lists/delete-v3-lists-address)
 
-## list\_members($address)
+## list\_members($address, $query)
 
-Get members for mailing list.
+Get members for mailing list. `$query` is an optional hash reference of the query, such as
+`subscribed` (`yes` or `no`) and `limit`.
 
 ```perl
 # get members (every page; see "Lists of every page")
 my ($members) = $mailgun->list_members('ml@example.com');
+
+# only the members who unsubscribed
+my ($members) = $mailgun->list_members('ml@example.com', { subscribed => 'no' });
 ```
 
 [Get members of a mailing list](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/mailing-lists/get-lists-list_address-members-pages)
