@@ -122,6 +122,28 @@ sub domain_api_url {
         $self->api_key, $self->api_base, $self->domain, $method;
 }
 
+# The URL path from its segments, such as ('lists', $address, 'members'). Each segment (a list
+# address, a member address, a template name) is percent-encoded on its own (#34). What a
+# segment can hold as it is (the pchar of RFC 3986: `@`, `+` and the like) is left alone, so the
+# addresses that worked before go out the same; `?`, `#`, `/`, `%` and the rest are encoded, so
+# that they cannot end the path or add a segment.
+#
+# A decoded string (one with the UTF-8 flag) is sent as UTF-8. Any other string is taken as the
+# bytes to send, as before, so that an address read without decoding is not encoded twice.
+#
+# An undefined or empty segment dies: `list(undef)` would otherwise ask for `lists`, every list.
+sub _path {
+    my @segments = @_;
+
+    return join '/', map {
+        croak 'an address or a name is required' unless defined $_ && length $_;
+        my $segment = $_;
+        utf8::encode($segment) if utf8::is_utf8($segment);
+        $segment =~ s/([^A-Za-z0-9\-._~!\$&'()*+,;=:\@])/sprintf '%%%02X', ord $1/ge;
+        $segment;
+    } @segments;
+}
+
 sub message {
     my ($self, $args) = @_;
 
@@ -217,7 +239,7 @@ sub add_list {
 sub list {
     my ($self, $address) = @_;
 
-    my $res = $self->client->get($self->api_url("lists/$address"));
+    my $res = $self->client->get($self->api_url(_path('lists', $address)));
     my $json = $self->decode_response($res) or return;
     return $json->{list};
 }
@@ -225,28 +247,28 @@ sub list {
 sub update_list {
     my ($self, $address, $args) = @_;
 
-    my $res = $self->client->put($self->api_url("lists/$address"), [], $args);
+    my $res = $self->client->put($self->api_url(_path('lists', $address)), [], $args);
     $self->decode_response($res);
 }
 
 sub delete_list {
     my ($self, $address) = @_;
 
-    my $res = $self->client->delete($self->api_url("lists/$address"));
+    my $res = $self->client->delete($self->api_url(_path('lists', $address)));
     $self->decode_response($res);
 }
 
 sub list_members {
     my ($self, $address) = @_;
 
-    return $self->recursive("lists/$address/members/pages");
+    return $self->recursive(_path('lists', $address, 'members', 'pages'));
 }
 
 sub add_list_member {
     my ($self, $address, $args) = @_;
 
     my $res = $self->client->post(
-        $self->api_url("lists/$address/members"), [], $args);
+        $self->api_url(_path('lists', $address, 'members')), [], $args);
     $self->decode_response($res);
 }
 
@@ -254,14 +276,14 @@ sub add_list_members {
     my ($self, $address, $args) = @_;
 
     my $res = $self->client->post(
-        $self->api_url("lists/$address/members.json"), [], $args);
+        $self->api_url(_path('lists', $address, 'members.json')), [], $args);
     $self->decode_response($res);
 }
 
 sub list_member {
     my ($self, $address, $member) = @_;
 
-    my $res = $self->client->get($self->api_url("lists/$address/members/$member"));
+    my $res = $self->client->get($self->api_url(_path('lists', $address, 'members', $member)));
     my $json = $self->decode_response($res) or return;
     return $json->{member};
 }
@@ -270,7 +292,7 @@ sub update_list_member {
     my ($self, $address, $member, $args) = @_;
 
     my $res = $self->client->put(
-        $self->api_url("lists/$address/members/$member"), [], $args);
+        $self->api_url(_path('lists', $address, 'members', $member)), [], $args);
     $self->decode_response($res);
 }
 
@@ -278,7 +300,7 @@ sub delete_list_member {
     my ($self, $address, $member) = @_;
 
     my $res = $self->client->delete(
-        $self->api_url("lists/$address/members/$member"));
+        $self->api_url(_path('lists', $address, 'members', $member)));
     $self->decode_response($res);
 }
 
@@ -325,7 +347,7 @@ sub delete_template {
     my ($self, $name) = @_;
 
     my $res = $self->client->delete(
-        $self->domain_api_url("templates/$name"));
+        $self->domain_api_url(_path('templates', $name)));
     $self->decode_response($res);
 }
 
