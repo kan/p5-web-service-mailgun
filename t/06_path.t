@@ -23,7 +23,8 @@ use WebService::Mailgun;
 
     package t::Response;
     sub new        { bless {}, shift }
-    sub is_success { 1 }
+    sub is_success  { 1 }
+    sub status_line { '200 OK' }
     sub content    { '{"items":[],"list":{},"member":{}}' }
 }
 

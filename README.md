@@ -41,6 +41,11 @@ my $res = $mailgun->message($args)
     or die sprintf '%s: %s', $mailgun->error_status, $mailgun->error;
 ```
 
+A response that is not what Mailgun sends fails the same way, even with a `2xx` status (then
+in `error_status`): a body that is not a JSON object, a page without its list of items, and a
+`paging.next` that points back to a page already fetched. An empty body (`204 No Content`) is
+a success with nothing in it.
+
 The methods that return every page (["Lists of every page"](#lists-of-every-page)) do not return `undef`: they stop
 at the page that failed and return the items fetched so far. Without `RaiseError`, a failure
 there shows only in `error`, which keeps the message of the last failure until the next one.
@@ -51,7 +56,8 @@ there shows only in `error`, which keeps the message of the last failure until t
 return two values: an array reference of all the items, and the `paging.next` URL of that
 empty page as a [URI](https://metacpan.org/pod/URI), where the items that come later will be (for `event`, see
 ["Event Polling"](#event-polling)). When a request fails, the second value is the URL of the page that failed
-instead, so that the rest can be fetched from there. Take the items in list context:
+instead, so that the rest can be fetched from there. A page with no `paging.next` is the last
+one, and the second value is that page's own URL. Take the items in list context:
 
 ```perl
 my ($lists) = $mailgun->lists();
@@ -80,7 +86,7 @@ The error message of the last request that failed.
 
 ## error\_status
 
-The status line (`401 Unauthorized`, say) of the last request that failed.
+The status line (`401 Unauthorized`, say) of the last request that failed (see ["Errors"](#errors)).
 
 ## message($args)
 
