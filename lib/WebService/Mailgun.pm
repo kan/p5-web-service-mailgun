@@ -25,27 +25,48 @@ use Class::Accessor::Lite (
     ro  => [qw(error error_status)],
 );
 
+# The body of a response as a hash reference, or undef when it is not a JSON object.
+sub _json_object {
+    my ($res) = @_;
+
+    my $json = try { decode_json $res->content };
+    return ref $json eq 'HASH' ? $json : undef;
+}
+
 sub decode_response {
     my ($self, $res) = @_;
 
+    # Every endpoint answers with a JSON object. A success that is not one (a page from a proxy,
+    # say) is a failure too, so that RaiseError decides whether it dies, as for any other (#35).
+    # An empty body (204 No Content) is a success with nothing in it. The body goes into the
+    # message cut short: a proxy's HTML page would otherwise fill the logs.
     if ($res->is_success) {
-        return decode_json $res->content;
-    } else {
-        my $json;
-        try {
-            $json = decode_json $res->content;
-        } catch {
-            $json = { message => $res->content };
-        };
-        $self->{error} = $json->{message};
-        $self->{error_status} = $res->status_line;
-        if ($self->RaiseError) {
-            carp $self->error;
-            croak $self->error_status;
-        } else {
-            return;
-        }
+        my $content = $res->content // '';
+        return {} if $content eq '';
+        my $json = _json_object($res);
+        return $json if $json;
+        my $start = length $content > 200 ? substr($content, 0, 200) . '...' : $content;
+        return $self->_fail("the response is not a JSON object: $start", $res->status_line);
     }
+
+    my $json = _json_object($res);
+    my $message = $json && defined $json->{message} && !ref $json->{message}
+        ? $json->{message} : $res->content;
+    return $self->_fail($message, $res->status_line);
+}
+
+# Records a failure in error and error_status, and dies with RaiseError. Without it, returns
+# nothing, like the methods do on a failure.
+sub _fail {
+    my ($self, $message, $status_line) = @_;
+
+    $self->{error} = $message;
+    $self->{error_status} = $status_line;
+    if ($self->RaiseError) {
+        carp $self->error;
+        croak $self->error_status;
+    }
+    return;
 }
 
 sub recursive {
@@ -60,27 +81,48 @@ sub recursive {
         $api_uri->query_form($query);
     }
 
+    # The URLs fetched so far, without the API key: a paging.next that points back to one of them
+    # would go round for ever (#35).
+    my %seen;
+    my $status_line;
     while (1) {
+        my $plain = $api_uri->clone;
+        $plain->userinfo(undef);
+        if ($seen{"$plain"}++) {
+            $self->_fail("paging.next points back to $plain", $status_line);
+            $next = $api_uri;
+            last;
+        }
         my $res = $self->client->get($api_uri->as_string);
+        $status_line = $res->status_line;
         my $json = $self->decode_response($res);
+        # A page without the list of items is a failure, like a request that failed (#35).
+        if ($json && ref $json->{$key} ne 'ARRAY') {
+            $json = $self->_fail("the response has no '$key' list", $res->status_line);
+        }
         unless ($json) {
             # The request failed: return the URL of the page that failed, so that the caller can
             # fetch the rest from there.
             $next = $api_uri;
             last;
         }
-        unless (scalar @{$json->{$key}}) {
-            # paging.next of the empty page: where the items that come later will be. For events
-            # this is how Event Polling goes on (#25). paging.previous would point back over the
-            # last page and return it again.
-            if ($json->{paging} && $json->{paging}->{next}) {
-                $next = URI->new($json->{paging}->{next});
+        push @result, @{$json->{$key}};
+        my $page_next = ref $json->{paging} eq 'HASH' && $json->{paging}->{next};
+        unless (scalar @{$json->{$key}} && $page_next) {
+            # The end: an empty page, or one with no paging.next. paging.next of the empty page
+            # is where the items that come later will be; for events this is how Event Polling
+            # goes on (#25). paging.previous would point back over the last page and return it
+            # again. A page with no paging.next gives its own URL instead, never undef: passed
+            # back, `event(undef)` would fetch every event again.
+            if ($page_next) {
+                $next = URI->new($page_next);
                 $next->userinfo('api:'.$self->api_key);
+            } else {
+                $next = $api_uri;
             }
             last;
         }
-        push @result, @{$json->{$key}};
-        $api_uri = URI->new($json->{paging}->{next});
+        $api_uri = URI->new($page_next);
         $api_uri->userinfo('api:'.$self->api_key);
     }
 
@@ -414,6 +456,11 @@ message and dies with the status line instead.
     my $res = $mailgun->message($args)
         or die sprintf '%s: %s', $mailgun->error_status, $mailgun->error;
 
+A response that is not what Mailgun sends fails the same way, even with a C<2xx> status (then
+in C<error_status>): a body that is not a JSON object, a page without its list of items, and a
+C<paging.next> that points back to a page already fetched. An empty body (C<204 No Content>) is
+a success with nothing in it.
+
 The methods that return every page (L</Lists of every page>) do not return C<undef>: they stop
 at the page that failed and return the items fetched so far. Without C<RaiseError>, a failure
 there shows only in C<error>, which keeps the message of the last failure until the next one.
@@ -424,7 +471,8 @@ C<lists>, C<list_members> and C<event> follow C<paging.next> until a page has no
 return two values: an array reference of all the items, and the C<paging.next> URL of that
 empty page as a L<URI>, where the items that come later will be (for C<event>, see
 L</Event Polling>). When a request fails, the second value is the URL of the page that failed
-instead, so that the rest can be fetched from there. Take the items in list context:
+instead, so that the rest can be fetched from there. A page with no C<paging.next> is the last
+one, and the second value is that page's own URL. Take the items in list context:
 
     my ($lists) = $mailgun->lists();
     my ($events, $next) = $mailgun->event({ event => 'stored', ascending => 'yes' });
@@ -451,7 +499,7 @@ The error message of the last request that failed.
 
 =head2 error_status
 
-The status line (C<401 Unauthorized>, say) of the last request that failed.
+The status line (C<401 Unauthorized>, say) of the last request that failed (see L</Errors>).
 
 =head2 message($args)
 

@@ -68,7 +68,8 @@ docker compose run --rm \
 キーは失効済み)。ネットワーク非依存なのは `t/00_compile.t` と、パッケージ変数
 `$WebService::Mailgun::API_BASE` を存在しないホストへ差し替えてエラー経路だけを見る
 `t/03_error.t` (ダミーの認証情報で動く)、HTTP クライアント (`$mailgun->{_client}`) を差し替えて
-組み立てた URL を見る `t/05_event_url.t` と `t/06_path.t`。URL の組み立てを確かめるテストは、この差し替えで書く。
+組み立てた URL を見る `t/05_event_url.t` と `t/06_path.t`、応答を与えてエラーの扱いを見る
+`t/07_unexpected_response.t`。URL の組み立てや応答の扱いを確かめるテストは、この差し替えで書く。
 実 API を叩くテストの失敗は、キー失効や
 ネットワーク不通が原因のこともあるので即コードのバグと判断しないこと。
 
@@ -176,7 +177,9 @@ GitHub Release を作る。仕組みと落ちたときの扱いは `scripts/tagp
 Mailgun の `*/pages` 系と events は `paging.next` を辿る。`recursive` は items が空になるまで
 next を辿って全件を集め、`(\@items, $next_uri)` の **2 要素リスト** を返す。`$next_uri` は
 空のページの `paging.next`。途中で失敗したときは、失敗したページの URL (渡し直せば続きから取れる。
-`undef` にすると、`event(undef)` が条件なしで全件を取り直してしまう)。返り値が 2 つなので呼び出し側はリストで受ける
+`undef` にすると、`event(undef)` が条件なしで全件を取り直してしまう)。`paging.next` の無いページで
+止まったときも、同じ理由で `undef` ではなくそのページの URL を返す。items の無いページと、辿った URL へ
+戻る `paging.next` は失敗として扱う (#35)。返り値が 2 つなので呼び出し側はリストで受ける
 (`my ($lists) = $mailgun->lists();`)。スカラーで受けると `$next_uri` が入る。POD の
 「Lists of every page」に利用者向けの説明がある。途中のページで失敗しても `undef` は返さず、
 それまでに集めた分を返す (POD の「Errors」)。
