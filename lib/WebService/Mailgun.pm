@@ -18,6 +18,7 @@ use File::Temp;
 our $VERSION = "1.0.0";
 our $API_BASE = 'api.mailgun.net/v3';
 our $API_BASE_EU = 'api.eu.mailgun.net/v3';
+our $API_BASE_AU = 'api.au.mailgun.net/v3';
 
 use Class::Accessor::Lite (
     new => 1,
@@ -143,6 +144,8 @@ sub api_base {
     if ($self->region) {
         if (lc($self->region) eq "eu") {
             return $API_BASE_EU;
+        } elsif (lc($self->region) eq "au") {
+            return $API_BASE_AU;
         } elsif (lc($self->region) ne "us") {
             die "unsupported region '" . $self->region ."'";
         }
@@ -507,7 +510,7 @@ In scalar context they return the URL, not the items.
 
 =head1 METHODS
 
-=head2 C<< new(api_key => $api_key, domain => $domain, region => "us"|"eu", RaiseError => 0|1) >>
+=head2 C<< new(api_key => $api_key, domain => $domain, region => "us"|"eu"|"au", RaiseError => 0|1) >>
 
 Create a WebService::Mailgun object.
 
@@ -517,7 +520,8 @@ Die when a request fails, instead of returning C<undef> (see L</Errors>).
 
 =head3 region (default: "us")
 
-The region the domain belongs to: C<us> or C<eu>. Any other value dies when a request is made.
+The region the domain belongs to: C<us>, C<eu> or C<au>. Any other value dies when a request
+is made. The AU region (C<api.au.mailgun.net>) is for Mailgun Send customers who asked for it.
 
 =head2 error
 

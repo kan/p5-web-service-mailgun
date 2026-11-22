@@ -162,8 +162,9 @@ GitHub Release を作る。仕組みと落ちたときの扱いは `scripts/tagp
 - `domain_api_url($method)` — ドメイン単位のエンドポイント (`messages`, `messages.mime`, `events`, `templates/*`)
 
 どちらも `https://api:<api_key>@<base>/...` の形で **URL の userinfo に API キーを埋め込む** Basic 認証。
-ベースホストは `api_base()` が `region` 属性 (`us` / `eu`、未指定は us) で `$API_BASE` / `$API_BASE_EU` を
-切り替える。未知の region は `die`。両者はパッケージ変数なのでテストから差し替え可能。
+ベースホストは `api_base()` が `region` 属性 (`us` / `eu` / `au`、未指定は us) で `$API_BASE` /
+`$API_BASE_EU` / `$API_BASE_AU` を切り替える。未知の region は `die`。どれもパッケージ変数なので
+テストから差し替え可能。
 
 ### エラー処理は `decode_response` に一本化
 
