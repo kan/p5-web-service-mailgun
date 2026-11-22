@@ -42,8 +42,9 @@ my $res = $mailgun->message($args)
 ```
 
 A response that is not what Mailgun sends fails the same way, even with a `2xx` status (then
-in `error_status`): a body that is not a JSON object, a page without its list of items, and a
-`paging.next` that points back to a page already fetched. An empty body (`204 No Content`) is
+in `error_status`): a body that is not a JSON object, a page without its list of items, a
+`paging.next` that is not an https URL on the API's host, and one that points back to a page
+already fetched. An empty body (`204 No Content`) is
 a success with nothing in it.
 
 The methods that return every page (["Lists of every page"](#lists-of-every-page)) do not return `undef`: they stop
@@ -56,8 +57,10 @@ there shows only in `error`, which keeps the message of the last failure until t
 return two values: an array reference of all the items, and the `paging.next` URL of that
 empty page as a [URI](https://metacpan.org/pod/URI), where the items that come later will be (for `event`, see
 ["Event Polling"](#event-polling)). When a request fails, the second value is the URL of the page that failed
-instead, so that the rest can be fetched from there. A page with no `paging.next` is the last
-one, and the second value is that page's own URL. Take the items in list context:
+instead; passed back to `event`, it fetches the rest of the events from there. A page with no
+`paging.next` is the last one, and the second value is that page's own URL. The URL carries no
+API key, so it can be kept or logged; `event` sets the key when it is passed back. Take the
+items in list context:
 
 ```perl
 my ($lists) = $mailgun->lists();
@@ -409,8 +412,9 @@ my $res = $mailgun->delete_template($name);
 # Event Polling
 
 The second value `event` returns is the `paging.next` URL of the empty page it stopped at, as a
-[URI](https://metacpan.org/pod/URI) with the API key set. Pass it back to `event` in place of the query, and it returns the
-events stored since the last call, and the URL to use the next time:
+[URI](https://metacpan.org/pod/URI) without the API key (keep it as a string between runs, if you like). Pass it back to
+`event` in place of the query, and it sets the API key, returns the events stored since the
+last call, and the URL to use the next time:
 
 ```perl
 use Time::Piece;

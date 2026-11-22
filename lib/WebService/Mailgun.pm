@@ -109,25 +109,46 @@ sub recursive {
         }
         push @result, @{$json->{$key}};
         my $page_next = ref $json->{paging} eq 'HASH' && $json->{paging}->{next};
+        # The API key is set on paging.next to fetch it, so it has to be an https URL on the
+        # API's host, as for event($url). Any other (a relative URL, say) is a failure.
+        if ($page_next) {
+            $page_next = $self->_api_host_url($page_next);
+            unless ($page_next) {
+                my ($host) = split m{/}, $self->api_base;
+                $self->_fail("paging.next is not an https URL on $host", $res->status_line);
+                $next = $api_uri;
+                last;
+            }
+        }
         unless (scalar @{$json->{$key}} && $page_next) {
             # The end: an empty page, or one with no paging.next. paging.next of the empty page
             # is where the items that come later will be; for events this is how Event Polling
             # goes on (#25). paging.previous would point back over the last page and return it
             # again. A page with no paging.next gives its own URL instead, never undef: passed
             # back, `event(undef)` would fetch every event again.
-            if ($page_next) {
-                $next = URI->new($page_next);
-                $next->userinfo('api:'.$self->api_key);
-            } else {
-                $next = $api_uri;
-            }
+            $next = $page_next || $api_uri;
             last;
         }
-        $api_uri = URI->new($page_next);
+        $api_uri = $page_next;
         $api_uri->userinfo('api:'.$self->api_key);
     }
 
+    # The URL goes back without the API key: a caller of Event Polling keeps it (in a database,
+    # say) or logs it, and event($url) sets the key again before fetching it (#38).
+    $next = $next->clone;
+    $next->userinfo(undef);
     return \@result, $next;
+}
+
+# A copy of $url (a URI or a string) as a URI when it is an https URL on the API's host, or
+# undef. Only such a URL gets the API key.
+sub _api_host_url {
+    my ($self, $url) = @_;
+
+    my $uri = blessed($url) ? $url->clone : URI->new($url);
+    my ($host) = split m{/}, $self->api_base;
+    return unless ($uri->scheme // '') eq 'https' && lc($uri->host) eq lc($host);
+    return $uri;
 }
 
 sub client {
@@ -383,10 +404,13 @@ sub event {
         # A URL (the next URL an earlier call returned, for Event Polling) is fetched as it
         # is. Mailgun's paging URLs carry no credentials, so the API key is set on it: only for
         # an https URL on the API's own host, so that the key is never sent anywhere else.
-        $api_url = blessed($query) ? $query->clone : URI->new($query);
-        my ($host) = split m{/}, $self->api_base;
-        unless (($api_url->scheme // '') eq 'https' && lc($api_url->host) eq lc($host)) {
-            croak "event() takes a query hash reference or an https URL on $host, not '$query'";
+        $api_url = $self->_api_host_url($query);
+        unless ($api_url) {
+            # Without the userinfo: a URL kept from 1.0.0 still carries the API key.
+            my $shown = blessed($query) ? $query->clone : URI->new($query);
+            $shown->userinfo(undef) if $shown->can('userinfo');
+            my ($host) = split m{/}, $self->api_base;
+            croak "event() takes a query hash reference or an https URL on $host, not '$shown'";
         }
         $api_url->userinfo('api:'.$self->api_key);
     } else {
@@ -486,8 +510,9 @@ message and dies with the status line instead.
         or die sprintf '%s: %s', $mailgun->error_status, $mailgun->error;
 
 A response that is not what Mailgun sends fails the same way, even with a C<2xx> status (then
-in C<error_status>): a body that is not a JSON object, a page without its list of items, and a
-C<paging.next> that points back to a page already fetched. An empty body (C<204 No Content>) is
+in C<error_status>): a body that is not a JSON object, a page without its list of items, a
+C<paging.next> that is not an https URL on the API's host, and one that points back to a page
+already fetched. An empty body (C<204 No Content>) is
 a success with nothing in it.
 
 The methods that return every page (L</Lists of every page>) do not return C<undef>: they stop
@@ -500,8 +525,10 @@ C<lists>, C<list_members> and C<event> follow C<paging.next> until a page has no
 return two values: an array reference of all the items, and the C<paging.next> URL of that
 empty page as a L<URI>, where the items that come later will be (for C<event>, see
 L</Event Polling>). When a request fails, the second value is the URL of the page that failed
-instead, so that the rest can be fetched from there. A page with no C<paging.next> is the last
-one, and the second value is that page's own URL. Take the items in list context:
+instead; passed back to C<event>, it fetches the rest of the events from there. A page with no
+C<paging.next> is the last one, and the second value is that page's own URL. The URL carries no
+API key, so it can be kept or logged; C<event> sets the key when it is passed back. Take the
+items in list context:
 
     my ($lists) = $mailgun->lists();
     my ($events, $next) = $mailgun->event({ event => 'stored', ascending => 'yes' });
@@ -810,8 +837,9 @@ L<Delete a template|https://documentation.mailgun.com/docs/mailgun/api-reference
 =head1 Event Polling
 
 The second value C<event> returns is the C<paging.next> URL of the empty page it stopped at, as a
-L<URI> with the API key set. Pass it back to C<event> in place of the query, and it returns the
-events stored since the last call, and the URL to use the next time:
+L<URI> without the API key (keep it as a string between runs, if you like). Pass it back to
+C<event> in place of the query, and it sets the API key, returns the events stored since the
+last call, and the URL to use the next time:
 
     use Time::Piece;
 
