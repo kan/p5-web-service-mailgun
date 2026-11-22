@@ -169,9 +169,11 @@ GitHub Release を作る。仕組みと落ちたときの扱いは `scripts/tagp
 ### エラー処理は `decode_response` に一本化
 
 全 API メソッドは最後に `$self->decode_response($res)` を呼ぶ。成功なら decode 済み JSON、
-失敗なら `error` / `error_status` を埋めたうえで、`RaiseError` が真なら `carp`+`croak`、
-偽なら `return;` (undef)。したがって呼び出し側は `my $json = $self->decode_response($res) or return;`
-のように undef を通す形で書く。新しい API メソッドを足すときもこの規約に従うこと。
+失敗なら `error` / `error_status` / `error_response` (応答そのもの。429 のヘッダーを読むため、#43) を
+埋めたうえで、`RaiseError` が真なら `carp`+`croak`、偽なら `return;` (undef)。したがって呼び出し側は
+`my $json = $self->decode_response($res) or return;` のように undef を通す形で書く。新しい API メソッドを
+足すときもこの規約に従うこと。応答の形が想定と違うときなど、`decode_response` の外で失敗にするときは
+`$self->_fail($message, $res)` を呼ぶ (3 つの属性と `RaiseError` の扱いがそろう)。
 
 ### ページング (`recursive`)
 

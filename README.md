@@ -51,6 +51,25 @@ The methods that return every page (["Lists of every page"](#lists-of-every-page
 at the page that failed and return the items fetched so far. Without `RaiseError`, a failure
 there shows only in `error`, which keeps the message of the last failure until the next one.
 
+### Rate limits
+
+Mailgun answers `429 Too Many Requests` when the account sends too many requests. This module
+does not try again by itself. The response
+in `error_response` tells when to: `X-RateLimit-Reset` is the time (in milliseconds since the
+epoch, UTC) the limit is reset.
+
+```perl
+my $res = $mailgun->message($args);
+if (!$res && $mailgun->error_status =~ /^429/) {
+    my $reset = $mailgun->error_response->header('X-RateLimit-Reset');
+    my $wait  = $reset ? int($reset / 1000 - time) + 1 : 1;
+    sleep $wait if $wait > 0;
+    $res = $mailgun->message($args);
+}
+```
+
+[Rate limits](https://documentation.mailgun.com/docs/mailgun/api-reference/api-overview)
+
 ## Lists of every page
 
 `lists`, `list_members` and `event` follow `paging.next` until a page has no items, and
@@ -97,6 +116,13 @@ The error message of the last request that failed.
 ## error\_status
 
 The status line (`401 Unauthorized`, say) of the last request that failed (see ["Errors"](#errors)).
+
+## error\_response
+
+The response (a [Furl::Response](https://metacpan.org/pod/Furl%3A%3AResponse)) of the last request that failed, for what `error` and
+`error_status` leave out, such as its headers. See ["Rate limits"](#rate-limits). It does not keep the
+request (whose URL carries the API key). For a response that is not what Mailgun sends (see
+["Errors"](#errors)), it is that response, which can have a `2xx` status.
 
 ## message($args)
 
