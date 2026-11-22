@@ -15,7 +15,7 @@ use overload ();
 use HTTP::Request::Common;
 
 
-our $VERSION = "1.0.0";
+our $VERSION = "1.1.0";
 our $API_BASE = 'api.mailgun.net/v3';
 our $API_BASE_EU = 'api.eu.mailgun.net/v3';
 our $API_BASE_AU = 'api.au.mailgun.net/v3';

@@ -7,6 +7,8 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-22
+
 - Fix the methods that take a mailing list address, a member address or a template name: the value went into the URL path as it was, so one with `?`, `#`, `/` or `%` (all allowed in an e-mail address) sent the request to another URL. Such characters are now percent-encoded; `@`, `+` and the others a path segment can hold go out as before. Pass the address as it is: one already percent-encoded is encoded again. A missing (undefined or empty) address or name now dies instead of asking for another URL, such as `list(undef)` for every list (#34)
 - Fix the methods dying without `RaiseError` on a response they did not expect: a failure whose body was JSON but not an object, a success whose body was not a JSON object, and a page of `lists()` / `list_members()` / `event()` without its list of items or without `paging.next`. Each of the first three is now a failure like any other (`error` and `error_status` are set, and it dies only with `RaiseError`), and a page without items gives its URL as the second value, as a failed request does. A page without `paging.next` is taken as the last one, and the second value is its own URL (never `undef`, which `event()` would take as a query for every event). A `paging.next` that points back to a page already fetched stops there as a failure, instead of going round for ever. A success with an empty body (`204 No Content`) returns an empty hash reference (#35)
 - `message()` takes several values of a key in an array reference, such as `to => ['a@example.com', 'b@example.com']` or `'o:tag' => [...]`, and sends the key once for each. It used to die, taking the array reference for a file and opening a file named after the first address. Under `attachment` and `inline`, an array reference is still a file, and an array reference of those is several files. An empty array reference dies instead of leaving the key out (#36)
@@ -111,6 +113,7 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 
 - Original version
 
+[1.1.0]: https://github.com/kan/p5-web-service-mailgun/releases/tag/v1.1.0
 [1.0.0]: https://github.com/kan/p5-web-service-mailgun/releases/tag/v1.0.0
 [0.17]: https://metacpan.org/release/MIKIHOSHI/WebService-Mailgun-0.17
 [0.16]: https://metacpan.org/release/MIKIHOSHI/WebService-Mailgun-0.16
