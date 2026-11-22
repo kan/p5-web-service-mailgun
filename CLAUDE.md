@@ -186,7 +186,8 @@ next を辿って全件を集め、`(\@items, $next_uri)` の **2 要素リス�
 それまでに集めた分を返す (POD の「Errors」)。
 
 Mailgun が返す paging URL には認証情報が含まれないため、`$uri->userinfo('api:'.$self->api_key)` を
-毎回付け直している。`$next_uri` は Event Polling 用にそのまま `event()` へ渡せる
+毎回付け直している。**返す `$next_uri` には API キーを付けない** (#38)。利用者は Event Polling のために
+保存したりログに出したりするので。`$next_uri` は Event Polling 用にそのまま `event()` へ渡せる
 (`event($url)` は URI か文字列をそのまま要求する経路。API キーを付けるので、https で `api_base()` の
 ホストの URL 以外は `croak` する)。
 

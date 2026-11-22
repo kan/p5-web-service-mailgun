@@ -106,8 +106,7 @@ subtest 'a page without items is a failure, with the URL of that page' => sub {
     my ($items, $next) = eval { $mailgun->lists() };
     is $@, '', 'does not die';
     is_deeply [ map { $_->{id} } @$items ], ['a'], 'the items fetched before it';
-    $next->userinfo(undef);
-    is "$next", "$lists/2", 'the second value is the URL of the page';
+    is "$next", "$lists/2", 'the second value is the URL of the page, without the API key';
     is $mailgun->error, "the response has no 'items' list";
 };
 
@@ -130,8 +129,7 @@ subtest 'a page with no paging.next is the last one, and gives its own URL' => s
         is $@, '', "$page does not die";
         is scalar @$items, ($page =~ /"id"/ ? 1 : 0), 'the items';
         isa_ok $next, 'URI', 'not undef: event(undef) would fetch every event again';
-        $next->userinfo(undef);
-        is "$next", $lists, 'the URL of that page';
+        is "$next", $lists, 'the URL of that page, without the API key';
         is scalar @{ $mailgun->{_client}{urls} }, 1, 'nothing more is requested';
     }
 };
@@ -147,8 +145,21 @@ subtest 'a paging.next that points back stops, as a failure' => sub {
     is scalar @{ $mailgun->{_client}{urls} }, 2, 'no page is fetched twice';
     is $mailgun->error, "paging.next points back to $lists";
     is $mailgun->error_status, '200 Status';
-    $next->userinfo(undef);
-    is "$next", $lists;
+    is "$next", $lists, 'without the API key';
+};
+
+subtest 'a paging.next not on the API host over https is a failure' => sub {
+    for my $page_next ('/v3/lists/pages?page=2', 'http://api.mailgun.net/v3/lists/2', 'https://evil.example.com/v3/lists/2') {
+        my $mailgun = mailgun(0,
+            [200, qq({"items":[{"id":"a"}],"paging":{"next":"$page_next"}})],
+        );
+        my ($items, $next) = eval { $mailgun->lists() };
+        is $@, '', "'$page_next' does not die";
+        is_deeply [ map { $_->{id} } @$items ], ['a'], 'the items of the page';
+        is scalar @{ $mailgun->{_client}{urls} }, 1, 'the API key goes nowhere else';
+        is $mailgun->error, 'paging.next is not an https URL on api.mailgun.net';
+        is "$next", $lists, 'the URL of that page';
+    }
 };
 
 done_testing;
