@@ -71,7 +71,7 @@ In scalar context they return the URL, not the items.
 
 # METHODS
 
-## `new(api_key => $api_key, domain => $domain, region => "us"|"eu"|"au", RaiseError => 0|1)`
+## `new(api_key => $api_key, domain => $domain, region => "us"|"eu"|"au", RaiseError => 0|1, timeout => $seconds)`
 
 Create a WebService::Mailgun object.
 
@@ -83,6 +83,12 @@ Die when a request fails, instead of returning `undef` (see ["Errors"](#errors))
 
 The region the domain belongs to: `us`, `eu` or `au`. Any other value dies when a request
 is made. The AU region (`api.au.mailgun.net`) is for Mailgun Send customers who asked for it.
+
+### timeout (default: the one of [Furl](https://metacpan.org/pod/Furl), 10 seconds)
+
+The seconds a request may take, given to [Furl](https://metacpan.org/pod/Furl). Raise it to send large attachments over a
+slow connection. The HTTP client is made on the first request, so set it in `new`, or before
+the first request.
 
 ## error
 

@@ -215,8 +215,9 @@ Mailgun が返す paging URL には認証情報が含まれないため、`$uri-
 ### オブジェクト生成
 
 `Class::Accessor::Lite` の `new => 1` を使っており、コンストラクタは自動生成 (hashref をそのまま bless)。
-`api_key` / `domain` / `RaiseError` / `region` が rw、`error` / `error_status` が ro。
-Furl クライアントは `client()` で遅延生成し `_client` にキャッシュ。
+`api_key` / `domain` / `RaiseError` / `region` / `timeout` が rw、`error` / `error_status` が ro。
+Furl クライアントは `client()` で遅延生成し `_client` にキャッシュ。`timeout` は生成のときに Furl へ
+渡すので、最初のリクエストの後に変えても効かない (POD にもそう書いてある)。
 
 ## 変更時の注意
 
