@@ -23,7 +23,7 @@ our $API_BASE_AU = 'api.au.mailgun.net/v3';
 use Class::Accessor::Lite (
     new => 1,
     rw  => [qw(api_key domain RaiseError region timeout)],
-    ro  => [qw(error error_status)],
+    ro  => [qw(error error_status error_response)],
 );
 
 # The body of a response as a hash reference, or undef when it is not a JSON object.
@@ -47,27 +47,42 @@ sub decode_response {
         my $json = _json_object($res);
         return $json if $json;
         my $start = length $content > 200 ? substr($content, 0, 200) . '...' : $content;
-        return $self->_fail("the response is not a JSON object: $start", $res->status_line);
+        return $self->_fail("the response is not a JSON object: $start", $res);
     }
 
     my $json = _json_object($res);
     my $message = $json && defined $json->{message} && !ref $json->{message}
         ? $json->{message} : $res->content;
-    return $self->_fail($message, $res->status_line);
+    return $self->_fail($message, $res);
 }
 
 # Records a failure in error and error_status, and dies with RaiseError. Without it, returns
 # nothing, like the methods do on a failure.
 sub _fail {
-    my ($self, $message, $status_line) = @_;
+    my ($self, $message, $res) = @_;
 
     $self->{error} = $message;
-    $self->{error_status} = $status_line;
+    $self->{error_status} = $res->status_line;
+    # The response itself, for what error and error_status leave out: the headers of a 429, say,
+    # which tell when to try again (#43).
+    $self->{error_response} = _without_request($res);
     if ($self->RaiseError) {
         carp $self->error;
         croak $self->error_status;
     }
     return;
+}
+
+# A copy of a Furl::Response without the request it keeps (request_src, and captured_req_* when
+# Furl captured them): the URL of the request carries the API key, and its body every attachment.
+# error_response would otherwise hold both until the next failure.
+sub _without_request {
+    my ($res) = @_;
+
+    return $res unless blessed($res) && $res->isa('Furl::Response') && reftype($res) eq 'HASH';
+    my $copy = bless { %$res }, ref $res;
+    delete @{$copy}{qw(request_src captured_req_headers captured_req_content)};
+    return $copy;
 }
 
 sub recursive {
@@ -85,21 +100,22 @@ sub recursive {
     # The URLs fetched so far, without the API key: a paging.next that points back to one of them
     # would go round for ever (#35).
     my %seen;
-    my $status_line;
+    my $last_res;
     while (1) {
         my $plain = $api_uri->clone;
         $plain->userinfo(undef);
         if ($seen{"$plain"}++) {
-            $self->_fail("paging.next points back to $plain", $status_line);
+            # Not a URL fetched: the failure is told with the response that pointed back.
+            $self->_fail("paging.next points back to $plain", $last_res);
             $next = $api_uri;
             last;
         }
         my $res = $self->client->get($api_uri->as_string);
-        $status_line = $res->status_line;
+        $last_res = $res;
         my $json = $self->decode_response($res);
         # A page without the list of items is a failure, like a request that failed (#35).
         if ($json && ref $json->{$key} ne 'ARRAY') {
-            $json = $self->_fail("the response has no '$key' list", $res->status_line);
+            $json = $self->_fail("the response has no '$key' list", $res);
         }
         unless ($json) {
             # The request failed: return the URL of the page that failed, so that the caller can
@@ -115,7 +131,7 @@ sub recursive {
             $page_next = $self->_api_host_url($page_next);
             unless ($page_next) {
                 my ($host) = split m{/}, $self->api_base;
-                $self->_fail("paging.next is not an https URL on $host", $res->status_line);
+                $self->_fail("paging.next is not an https URL on $host", $res);
                 $next = $api_uri;
                 last;
             }
@@ -568,6 +584,23 @@ The methods that return every page (L</Lists of every page>) do not return C<und
 at the page that failed and return the items fetched so far. Without C<RaiseError>, a failure
 there shows only in C<error>, which keeps the message of the last failure until the next one.
 
+=head3 Rate limits
+
+Mailgun answers C<429 Too Many Requests> when the account sends too many requests. This module
+does not try again by itself. The response
+in C<error_response> tells when to: C<X-RateLimit-Reset> is the time (in milliseconds since the
+epoch, UTC) the limit is reset.
+
+    my $res = $mailgun->message($args);
+    if (!$res && $mailgun->error_status =~ /^429/) {
+        my $reset = $mailgun->error_response->header('X-RateLimit-Reset');
+        my $wait  = $reset ? int($reset / 1000 - time) + 1 : 1;
+        sleep $wait if $wait > 0;
+        $res = $mailgun->message($args);
+    }
+
+L<Rate limits|https://documentation.mailgun.com/docs/mailgun/api-reference/api-overview>
+
 =head2 Lists of every page
 
 C<lists>, C<list_members> and C<event> follow C<paging.next> until a page has no items, and
@@ -612,6 +645,13 @@ The error message of the last request that failed.
 =head2 error_status
 
 The status line (C<401 Unauthorized>, say) of the last request that failed (see L</Errors>).
+
+=head2 error_response
+
+The response (a L<Furl::Response>) of the last request that failed, for what C<error> and
+C<error_status> leave out, such as its headers. See L</Rate limits>. It does not keep the
+request (whose URL carries the API key). For a response that is not what Mailgun sends (see
+L</Errors>), it is that response, which can have a C<2xx> status.
 
 =head2 message($args)
 

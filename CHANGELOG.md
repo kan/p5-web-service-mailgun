@@ -17,6 +17,7 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 - Add `timeout` to `new()`: the seconds a request may take, given to Furl (its default is 10), for large attachments over a slow connection (#40)
 - `lists()` and `list_members()` take an optional hash reference of the query, such as `limit`, and `subscribed` for the members. A key of the query that `paging.next` leaves out is put back on the later pages, so that they are filtered the same way. Anything but a hash reference there now dies; it used to be ignored (#41)
 - `get_message_from_event()` sends the API key only to an https URL on `mailgun.net` or a host under it, as `event($url)` does for the API's host; any other `storage.url` (of an event kept and read back, say) dies. It takes any event that has `storage.url`, not only a `stored` one. The message it dies with for an event without `storage.url` changes to "invalid event! this method needs an event with storage.url ..." (#42)
+- Add `error_response`: the response (a Furl::Response) of the last request that failed, for its headers, such as `X-RateLimit-Reset` of a `429 Too Many Requests`. It does not keep the request, whose URL carries the API key. The documentation has a section on rate limits; the module still does not try again by itself (#43)
 - Do not list the bots that commit to the repository (github-actions for the release pull requests, Dependabot) as contributors in the distribution metadata (`x_contributors`); 1.0.0 listed github-actions
 
 ## [1.0.0] - 2026-11-09
