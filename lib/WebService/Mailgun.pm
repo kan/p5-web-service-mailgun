@@ -154,8 +154,20 @@ sub _api_host_url {
 
     my $uri = blessed($url) ? $url->clone : URI->new($url);
     my ($host) = split m{/}, $self->api_base;
-    return unless ($uri->scheme // '') eq 'https' && lc($uri->host) eq lc($host);
+    return unless _https_host($uri) eq lc($host);
     return $uri;
+}
+
+# The host of an https URI in lower case, or '' for any other URI. A host with anything but
+# letters, digits, `.` and `-` is '' too: URI decodes `%2F` in the host while the request goes
+# out with the string as it is, so `evil.example.com%2Fx.mailgun.net` would pass a check on the
+# name it ends with (#42).
+sub _https_host {
+    my ($uri) = @_;
+
+    return '' unless ($uri->scheme // '') eq 'https';
+    my $host = lc($uri->host // '');
+    return $host =~ /\A[a-z0-9.-]+\z/ ? $host : '';
 }
 
 sub client {
@@ -443,8 +455,25 @@ sub event {
 sub get_message_from_event {
     my ($self, $event) = @_;
 
-    die "invalid event! this method need 'stored' event only." if $event->{event} ne 'stored';
-    my $uri = URI->new($event->{storage}->{url});
+    # Any event that carries storage.url (stored, and others such as accepted) has a message to
+    # get; one without it dies, as a non-stored event did (#42).
+    my $storage = (reftype($event) // '') eq 'HASH' ? $event->{storage} : undef;
+    my $url = (reftype($storage) // '') eq 'HASH' ? $storage->{url} : undef;
+    croak "invalid event! this method needs an event with storage.url (a 'stored' event, say)."
+        unless defined $url && length $url && (!ref $url || (blessed($url) && $url->isa('URI')));
+
+    # The API key is set on storage.url, so it has to be an https URL on Mailgun's own domain:
+    # the storage hosts are per region (storage-us-east4.api.mailgun.net, say), so the API's
+    # host alone would refuse them. The API's host (api_base, which a test may point elsewhere)
+    # is taken too. An event kept and read back could have been changed.
+    my $uri = blessed($url) ? $url->clone : URI->new($url);
+    my $host = _https_host($uri);
+    my ($api_host) = split m{/}, $self->api_base;
+    unless ($host ne '' && ($host eq 'mailgun.net' || $host =~ /\.mailgun\.net\z/ || $host eq lc $api_host)) {
+        my $shown = $uri->clone;
+        $shown->userinfo(undef) if $shown->can('userinfo');
+        croak "get_message_from_event() takes storage.url only on https and mailgun.net, not '$shown'";
+    }
     $uri->userinfo('api:'.$self->api_key);
 
     my $res = $self->client->get($uri->as_string);
@@ -832,7 +861,9 @@ L<Get events|https://documentation.mailgun.com/docs/mailgun/api-reference/send/m
 
 =head2 get_message_from_event($event)
 
-Get stored message. C<$event> must be a C<stored> event; any other event dies.
+Get stored message. C<$event> must be an event with C<storage.url>, such as a C<stored> event;
+any other event dies. So does a C<storage.url> that is not an https URL on C<mailgun.net>, a
+host under it, or the API's host, as the API key is sent there.
 
     # get event data
     my ($events) = $mailgun->event({ event => 'stored' });

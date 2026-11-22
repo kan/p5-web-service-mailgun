@@ -379,7 +379,9 @@ my ($events, $next) = $mailgun->event({ event => 'stored', limit => 50 });
 
 ## get\_message\_from\_event($event)
 
-Get stored message. `$event` must be a `stored` event; any other event dies.
+Get stored message. `$event` must be an event with `storage.url`, such as a `stored` event;
+any other event dies. So does a `storage.url` that is not an https URL on `mailgun.net`, a
+host under it, or the API's host, as the API key is sent there.
 
 ```perl
 # get event data
