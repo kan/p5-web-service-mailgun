@@ -106,6 +106,9 @@ my $res = $mailgun->message({
 });
 ```
 
+A decoded string (one with the UTF-8 flag, such as one from `decode_utf8` or a literal under
+`use utf8`) is sent encoded in UTF-8. Any other string is sent as the bytes it holds.
+
 To give a key several values, pass them in an array reference; the key is sent once for each:
 
 ```perl
@@ -181,9 +184,13 @@ my $res = $mailgun->mime({
 });
 ```
 
-`mime()` changes the hash reference it is given: `message` becomes an array reference holding
-the path of a temporary file (or of `file`, which is removed). Pass a new hash reference for
-each call.
+The MIME message is bytes. A decoded string (one with the UTF-8 flag) is sent encoded in UTF-8,
+as are the values of the other keys, here and in `message`. Give `message` or `file`, not
+both.
+
+The other keys are sent as they are, and like `message`, several values of a key can be given in
+an array reference (`to => ['bar@example.com', 'baz@example.com']`). The hash reference
+given is not changed, so the same one can be passed again.
 
 [Send a message in MIME format](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/messages/post-v3--domain-name--messages-mime)
 

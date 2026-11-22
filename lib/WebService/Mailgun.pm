@@ -11,8 +11,8 @@ use URI;
 use Try::Tiny;
 use Carp;
 use Scalar::Util qw(blessed);
+use overload ();
 use HTTP::Request::Common;
-use File::Temp;
 
 
 our $VERSION = "1.0.0";
@@ -210,9 +210,46 @@ sub _path {
     } @segments;
 }
 
-# The keys of message() whose array reference is a file for HTTP::Request::Common
-# ([$path, $filename, ...]). An array reference under any other key is a list of values.
-my %FILE_KEYS = map { $_ => 1 } qw(attachment inline);
+# The form-data content of the key-value pairs given to $method (message, mime).
+#
+# `to => ['a@example.com', 'b@example.com']` sends `to` twice, as Mailgun takes a key given more
+# than once. HTTP::Request::Common would take the array reference for a file, and die opening a
+# file named after the first address (#36). Under the keys in @file_keys an array reference is
+# still a file ([$path, $filename, ...]), and an array reference of those is several files.
+sub _form_content {
+    my ($method, $pairs, @file_keys) = @_;
+
+    my %file_key = map { $_ => 1 } @file_keys;
+    my @content;
+    for (my $i = 0; $i < @$pairs; $i += 2) {
+        my ($key, $value) = @$pairs[$i, $i + 1];
+        if (ref $value ne 'ARRAY') {
+            push @content, $key => _form_value($value);
+            next;
+        }
+        # An empty list would leave the key out, and Mailgun would answer that it is missing.
+        croak "$method(): '$key' is an empty array reference" unless @$value;
+        if (!$file_key{$key}) {
+            push @content, map { ($key => _form_value($_)) } @$value;
+        } elsif (ref $value->[0] eq 'ARRAY') {
+            push @content, map { ($key => $_) } @$value;
+        } else {
+            push @content, $key => $value;
+        }
+    }
+    return \@content;
+}
+
+# A value of the form as bytes. A decoded string (one with the UTF-8 flag) is sent as UTF-8:
+# HTTP::Request::Common takes only bytes, and dies on a character above 0xFF.
+sub _form_value {
+    my ($value) = @_;
+
+    return $value if ref $value || !defined $value || !utf8::is_utf8($value);
+    my $bytes = $value;
+    utf8::encode($bytes);
+    return $bytes;
+}
 
 sub message {
     my ($self, $args) = @_;
@@ -228,29 +265,8 @@ sub message {
         die 'unsupport argument. message() need HashRef or ArrayRef.';
 	}
 
-    # `to => ['a@example.com', 'b@example.com']` sends `to` twice, as Mailgun takes a key given
-    # more than once. HTTP::Request::Common would take the array reference for a file, and die
-    # opening a file named after the first address (#36).
-    # Under attachment and inline, an array reference of array references is several files.
-    my @content;
-    for (my $i = 0; $i < @pairs; $i += 2) {
-        my ($key, $value) = @pairs[$i, $i + 1];
-        if (ref $value ne 'ARRAY') {
-            push @content, $key => $value;
-            next;
-        }
-        # An empty list would leave the key out, and Mailgun would answer that it is missing.
-        croak "message(): '$key' is an empty array reference" unless @$value;
-        if (!$FILE_KEYS{$key}) {
-            push @content, map { ($key => $_) } @$value;
-        } elsif (ref $value->[0] eq 'ARRAY') {
-            push @content, map { ($key => $_) } @$value;
-        } else {
-            push @content, $key => $value;
-        }
-    }
-
-    my $req = POST $self->domain_api_url('messages'), Content_type => 'form-data', Content => \@content;
+    my $content = _form_content('message', \@pairs, qw(attachment inline));
+    my $req = POST $self->domain_api_url('messages'), Content_type => 'form-data', Content => $content;
 
     my $res = $self->client->request($req);
     $self->decode_response($res);
@@ -258,58 +274,42 @@ sub message {
 
 
 
-sub mime { 
-		
+sub mime {
     my ($self, $args) = @_;
 
-    if (ref($args) eq 'HASH') {
-        # Well, good!
-    }
-    else {
+    unless (ref($args) eq 'HASH') {
         die 'unsupport argument. mime() needs a hash ref.';
     }
-	
-	
-	my $tmp = undef; 
 
-	if(exists($args->{message})){
-		$tmp = File::Temp->new();
-		
-		if(ref $args->{message} eq 'SCALAR'){ 
-			# save from a ref
-			print $tmp ${$args->{message}};
-			seek $tmp, 0, 0;
-		}
-		else {
-			# Save from a string
-			print $tmp $args->{message};
-			seek $tmp, 0, 0;
-		}
-		$args->{message} = [$tmp->filename];
-	}
-	elsif(exists($args->{file})){ 
-		if(-f $args->{file}){ 
-			$args->{message} =  [$args->{file}];
-			delete $args->{file}; 
-		}
-		else { 
-			die "cannot find file, " . $args->{file}; 
-		}
-	}
-	
-	# Put it back together: 
-	my @content = %$args;
+    # A copy: the hash reference given is left as it is, so that it can be passed again (#39).
+    my %args = %$args;
 
-    my $req = POST $self->domain_api_url('messages.mime'), 
-		Content_Type => 'form-data', 
-		Content => \@content;
-		
+    croak 'mime(): give message or file, not both' if exists $args{message} && exists $args{file};
+
+    if (exists $args{message}) {
+        # The MIME message goes in the form as the content of a file, from memory: no temporary
+        # file to write and remove.
+        my $message = $args{message};
+        my $mime = ref $message eq 'SCALAR'                    ? $$message
+                 : !ref $message                               ? $message
+                 : blessed($message) && overload::Method($message, '""') ? "$message"
+                 : croak 'mime(): message must be a string or a reference to a string';
+        # A MIME message is bytes. A decoded string (one with the UTF-8 flag) is sent as UTF-8.
+        $args{message} = [undef, 'message.mime', Content => _form_value($mime // '')];
+    }
+    elsif (exists $args{file}) {
+        my $file = delete $args{file};
+        croak "cannot find file, " . ($file // 'undef') unless defined $file && -f $file;
+        $args{message} = [$file];
+    }
+
+    my $content = _form_content('mime', [%args], 'message');
+    my $req = POST $self->domain_api_url('messages.mime'),
+        Content_Type => 'form-data',
+        Content => $content;
+
     my $res = $self->client->request($req);
-	
-	undef $tmp; 
-	
     $self->decode_response($res);
-
 }
 
 
@@ -570,6 +570,9 @@ Send email message.
         text    => 'text',
     });
 
+A decoded string (one with the UTF-8 flag, such as one from C<decode_utf8> or a literal under
+C<use utf8>) is sent encoded in UTF-8. Any other string is sent as the bytes it holds.
+
 To give a key several values, pass them in an array reference; the key is sent once for each:
 
     my $res = $mailgun->message({
@@ -637,9 +640,13 @@ The C<message> parameter should contain either a string or a reference to a stri
         message => \$str,
     });
 
-C<mime()> changes the hash reference it is given: C<message> becomes an array reference holding
-the path of a temporary file (or of C<file>, which is removed). Pass a new hash reference for
-each call.
+The MIME message is bytes. A decoded string (one with the UTF-8 flag) is sent encoded in UTF-8,
+as are the values of the other keys, here and in C<message>. Give C<message> or C<file>, not
+both.
+
+The other keys are sent as they are, and like C<message>, several values of a key can be given in
+an array reference (C<< to => ['bar@example.com', 'baz@example.com'] >>). The hash reference
+given is not changed, so the same one can be passed again.
 
 L<Send a message in MIME format|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/messages/post-v3--domain-name--messages-mime>
 
