@@ -68,7 +68,7 @@ In scalar context they return the URL, not the items.
 
 # METHODS
 
-## `new(api_key => $api_key, domain => $domain, region => "us"|"eu", RaiseError => 0|1)`
+## `new(api_key => $api_key, domain => $domain, region => "us"|"eu"|"au", RaiseError => 0|1)`
 
 Create a WebService::Mailgun object.
 
@@ -78,7 +78,8 @@ Die when a request fails, instead of returning `undef` (see ["Errors"](#errors))
 
 ### region (default: "us")
 
-The region the domain belongs to: `us` or `eu`. Any other value dies when a request is made.
+The region the domain belongs to: `us`, `eu` or `au`. Any other value dies when a request
+is made. The AU region (`api.au.mailgun.net`) is for Mailgun Send customers who asked for it.
 
 ## error
 
