@@ -203,9 +203,14 @@ Mailgun が返す paging URL には認証情報が含まれないため、`$uri-
 **添付ファイルなど同一キーを複数回渡す必要がある場合に順序付きの ArrayRef が要る** ため
 (`attachment => [ 'path' ]` の形式)。それ以外の ref は `die`。
 
-`mime()` は `message` に文字列 (または文字列 ref) を渡された場合 `File::Temp` に書き出して
-`[$filename]` としてフォームに載せる。`file` 指定なら存在確認のうえそのまま使う。
-一時ファイルはリクエスト送信後に `undef $tmp` で破棄している。
+`message()` と `mime()` は `_form_content` でフォームの中身を組み立てる。値の配列 ref は同じキーの
+繰り返しに展開する (`to => [...]`、#36)。ファイルのキー (`message()` は `attachment` / `inline`、
+`mime()` は `message`) の配列 ref だけは、HTTP::Request::Common のファイルの指定として残す。
+`add_template()` は展開しない (配列 ref はファイル)。
+
+`mime()` は渡された hash をコピーしてから組み立て、渡された hash を書き換えない (#39)。`message` の
+文字列 (または文字列 ref) は、一時ファイルに書かず、メモリ上の内容としてフォームに載せる
+(`[undef, 'message.mime', Content => $mime]`)。`file` 指定なら存在確認のうえそのまま使う。
 
 ### オブジェクト生成
 
