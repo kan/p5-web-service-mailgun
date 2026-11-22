@@ -180,7 +180,9 @@ next を辿って全件を集め、`(\@items, $next_uri)` の **2 要素リス�
 空のページの `paging.next`。途中で失敗したときは、失敗したページの URL (渡し直せば続きから取れる。
 `undef` にすると、`event(undef)` が条件なしで全件を取り直してしまう)。`paging.next` の無いページで
 止まったときも、同じ理由で `undef` ではなくそのページの URL を返す。items の無いページと、辿った URL へ
-戻る `paging.next` は失敗として扱う (#35)。返り値が 2 つなので呼び出し側はリストで受ける
+戻る `paging.next` は失敗として扱う (#35)。`lists()` / `list_members()` のクエリのうち `paging.next` に
+無いキーは、次のページの URL に足し直す (#41。`subscribed` が落ちると 2 ページ目から絞り込みが外れる)。
+返り値が 2 つなので呼び出し側はリストで受ける
 (`my ($lists) = $mailgun->lists();`)。スカラーで受けると `$next_uri` が入る。POD の
 「Lists of every page」に利用者向けの説明がある。途中のページで失敗しても `undef` は返さず、
 それまでに集めた分を返す (POD の「Errors」)。

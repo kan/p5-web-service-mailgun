@@ -10,7 +10,7 @@ use JSON;
 use URI;
 use Try::Tiny;
 use Carp;
-use Scalar::Util qw(blessed);
+use Scalar::Util qw(blessed reftype);
 use overload ();
 use HTTP::Request::Common;
 
@@ -119,6 +119,13 @@ sub recursive {
                 $next = $api_uri;
                 last;
             }
+            # The query of the first page (`subscribed` of list_members, say) goes on every
+            # page: a key that paging.next leaves out is put back, so that the later pages are
+            # not fetched without it (#41). A key it has is left as Mailgun gave it.
+            my %has = $page_next->query_form;
+            my @missing = grep { !exists $has{$_} } sort keys %$query;
+            $page_next->query_form($page_next->query_form, map { ($_ => $query->{$_}) } @missing)
+                if @missing;
         }
         unless (scalar @{$json->{$key}} && $page_next) {
             # The end: an empty page, or one with no paging.next. paging.next of the empty page
@@ -317,10 +324,20 @@ sub mime {
 
 
 
-sub lists {
-    my $self = shift;
+# The query of lists() / list_members(): a hash reference, or nothing (#41).
+sub _list_query {
+    my ($method, $query) = @_;
 
-    return $self->recursive('lists/pages');
+    return {} unless defined $query;
+    # reftype, not ref: a blessed hash (Hash::MultiValue, say) is a hash too.
+    croak "$method() takes a query hash reference" unless (reftype($query) // '') eq 'HASH';
+    return { %$query };
+}
+
+sub lists {
+    my ($self, $query) = @_;
+
+    return $self->recursive('lists/pages', _list_query('lists', $query));
 }
 
 sub add_list {
@@ -353,9 +370,10 @@ sub delete_list {
 }
 
 sub list_members {
-    my ($self, $address) = @_;
+    my ($self, $address, $query) = @_;
 
-    return $self->recursive(_path('lists', $address, 'members', 'pages'));
+    return $self->recursive(_path('lists', $address, 'members', 'pages'),
+        _list_query('list_members', $query));
 }
 
 sub add_list_member {
@@ -659,13 +677,16 @@ given is not changed, so the same one can be passed again.
 L<Send a message in MIME format|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/messages/post-v3--domain-name--messages-mime>
 
 
-=head2 lists()
+=head2 lists($query)
 
-Get list of mailing lists.
+Get list of mailing lists. C<$query> is an optional hash reference of the query, such as
+C<limit>, the number of lists on a page (fewer requests for many lists).
 
     # get mailing lists (every page; see "Lists of every page")
     my ($lists) = $mailgun->lists();
     # => ArrayRef of mailing list object.
+
+    my ($lists) = $mailgun->lists({ limit => 100 });
 
 L<Get mailing lists|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/mailing-lists/get-v3-lists-pages>
 
@@ -715,12 +736,16 @@ Delete mailing list.
 
 L<Delete a mailing list|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/mailing-lists/delete-v3-lists-address>
 
-=head2 list_members($address)
+=head2 list_members($address, $query)
 
-Get members for mailing list.
+Get members for mailing list. C<$query> is an optional hash reference of the query, such as
+C<subscribed> (C<yes> or C<no>) and C<limit>.
 
     # get members (every page; see "Lists of every page")
     my ($members) = $mailgun->list_members('ml@example.com');
+
+    # only the members who unsubscribed
+    my ($members) = $mailgun->list_members('ml@example.com', { subscribed => 'no' });
 
 L<Get members of a mailing list|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/mailing-lists/get-lists-list_address-members-pages>
 

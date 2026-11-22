@@ -15,6 +15,7 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 - `mime()` no longer changes the hash reference it is given, so the same one can be passed again; the second call used to send a broken message (`message`) or none (`file`). A MIME message given as a string goes in the request from memory, with no temporary file. Like `message()`, it takes several values of a key in an array reference (`to => [...]`). Giving both `message` and `file` dies, instead of sending the path of `file` as a field (#39)
 - `message()` and `mime()` send a decoded string (one with the UTF-8 flag) encoded in UTF-8. One with a character above `0xFF` used to die in HTTP::Request::Common, and one with only characters below `0x100` went out in Latin-1. A string of bytes is sent as it is (#39)
 - Add `timeout` to `new()`: the seconds a request may take, given to Furl (its default is 10), for large attachments over a slow connection (#40)
+- `lists()` and `list_members()` take an optional hash reference of the query, such as `limit`, and `subscribed` for the members. A key of the query that `paging.next` leaves out is put back on the later pages, so that they are filtered the same way. Anything but a hash reference there now dies; it used to be ignored (#41)
 - Do not list the bots that commit to the repository (github-actions for the release pull requests, Dependabot) as contributors in the distribution metadata (`x_contributors`); 1.0.0 listed github-actions
 
 ## [1.0.0] - 2026-11-09
