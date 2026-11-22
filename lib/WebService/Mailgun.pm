@@ -22,7 +22,7 @@ our $API_BASE_AU = 'api.au.mailgun.net/v3';
 
 use Class::Accessor::Lite (
     new => 1,
-    rw  => [qw(api_key domain RaiseError region)],
+    rw  => [qw(api_key domain RaiseError region timeout)],
     ro  => [qw(error error_status)],
 );
 
@@ -154,8 +154,10 @@ sub _api_host_url {
 sub client {
     my $self = shift;
 
+    # The client is made on the first request, so timeout has to be set before it (#40).
     $self->{_client} //= Furl->new(
         agent => __PACKAGE__ . '/' . $VERSION,
+        (defined $self->timeout ? (timeout => $self->timeout) : ()),
     );
 }
 
@@ -537,7 +539,7 @@ In scalar context they return the URL, not the items.
 
 =head1 METHODS
 
-=head2 C<< new(api_key => $api_key, domain => $domain, region => "us"|"eu"|"au", RaiseError => 0|1) >>
+=head2 C<< new(api_key => $api_key, domain => $domain, region => "us"|"eu"|"au", RaiseError => 0|1, timeout => $seconds) >>
 
 Create a WebService::Mailgun object.
 
@@ -549,6 +551,12 @@ Die when a request fails, instead of returning C<undef> (see L</Errors>).
 
 The region the domain belongs to: C<us>, C<eu> or C<au>. Any other value dies when a request
 is made. The AU region (C<api.au.mailgun.net>) is for Mailgun Send customers who asked for it.
+
+=head3 timeout (default: the one of L<Furl>, 10 seconds)
+
+The seconds a request may take, given to L<Furl>. Raise it to send large attachments over a
+slow connection. The HTTP client is made on the first request, so set it in C<new>, or before
+the first request.
 
 =head2 error
 
