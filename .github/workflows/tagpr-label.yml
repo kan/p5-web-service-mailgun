@@ -12,9 +12,9 @@ permissions: {}
 
 jobs:
   rebuild:
-    # The same tagpr-scripts commit as `tagpr.yml` and `scripts/tagpr/`; `verify-subtree.mjs` in
-    # test.yml checks this line too.
-    uses: kan/tagpr-scripts/.github/workflows/tagpr-label.yml@5798ef5c805057f28d47b7b518c2c1d067f55407
+    # The same tagpr-scripts commit as `tagpr.yml`, `publish.yml` and `scripts/tagpr/`;
+    # `verify-subtree.mjs` in test.yml checks this line too.
+    uses: kan/tagpr-scripts/.github/workflows/tagpr-label.yml@f95892b128286dd1f84eea57f1e08a17e1f26eb3
     permissions:
       actions: write        # start the tagpr workflow
       pull-requests: write  # mark the release pull request draft

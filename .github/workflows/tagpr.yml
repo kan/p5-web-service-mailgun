@@ -30,10 +30,11 @@ permissions:
 jobs:
   tagpr:
     # **The SHA is the tagpr-scripts commit pulled into `scripts/tagpr/`.** Move it in the pull
-    # request that pulls the subtree (the `git-subtree-split` line of the squash commit). A reusable
+    # request that pulls the subtree (the `git-subtree-split` line of the squash commit), together
+    # with the same line of `tagpr-label.yml` and `publish.yml`. A reusable
     # workflow from another repository is not pinned by `actions.lock`; a mismatch is caught by
     # `verify-subtree.mjs` in test.yml.
-    uses: kan/tagpr-scripts/.github/workflows/tagpr.yml@5798ef5c805057f28d47b7b518c2c1d067f55407
+    uses: kan/tagpr-scripts/.github/workflows/tagpr.yml@f95892b128286dd1f84eea57f1e08a17e1f26eb3
     # The most the shared workflow gets. All four are listed, as its README asks.
     permissions:
       contents: write       # push the release branch and the tag

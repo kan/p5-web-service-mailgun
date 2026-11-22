@@ -7,7 +7,7 @@
 // （tagpr と publish のワークフローと同じ呼ばれ方）。
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -95,8 +95,11 @@ function makeRepo({ version = '1.2.4', changelog = MINIMAL, pkg = true, lock = t
  * `GITHUB_ACTIONS=true` と `GITHUB_REPOSITORY=o/r` を渡す。`actions: false` で Actions の外に、
  * `repository: null` で `GITHUB_REPOSITORY` を消す（どちらも `origin` から決めさせる）
  */
-function run(script, cwd, args = [], { next = 'v1.2.4', current = 'v1.2.3', repository = 'o/r', actions = true } = {}) {
+function run(script, cwd, args = [], { next = 'v1.2.4', current = 'v1.2.3', repository = 'o/r', actions = true, env: extra = {} } = {}) {
   const env = { ...gitEnv(), TAGPR_NEXT_VERSION: next, TAGPR_CURRENT_VERSION: current };
+  // 外から来た値に左右されないよう消し、渡されたときだけ置く（--credits のテスト）
+  delete env.TAGPR_ARTIFACT_DIR;
+  Object.assign(env, extra);
   if (actions) env.GITHUB_ACTIONS = 'true';
   else delete env.GITHUB_ACTIONS;
   if (repository === null) delete env.GITHUB_REPOSITORY;
@@ -189,6 +192,56 @@ test('prepare: --changelog-only leaves package-lock.json alone', () => {
   prepareAndRead(dir, ['--changelog-only']);
   assert.deepEqual(lockVersions(dir), ['1.2.3', '1.2.3']);
 });
+
+/** 共通の workflow が渡す artifact のディレクトリ。CREDITS を置く（null なら置かない） */
+function makeArtifactDir(credits) {
+  const dir = mkdtempSync(join(tmpdir(), 'tagpr-artifact-'));
+  dirs.push(dir);
+  if (credits !== null) writeFileSync(join(dir, 'CREDITS'), credits);
+  return dir;
+}
+
+test('prepare: --credits replaces CREDITS with TAGPR_ARTIFACT_DIR/CREDITS as it is', () => {
+  // ライセンスの本文には CR も入りうるので、バイト列のまま写す
+  const generated = 'Go (the standard library)\nhttps://golang.org/\n----------------------------------------------------------------\nCopyright\r\n';
+  const dir = makeRepo({ pkg: false, lock: false, files: { CREDITS: 'old\n' } });
+  prepareAndRead(dir, ['--changelog-only', '--credits'], { env: { TAGPR_ARTIFACT_DIR: makeArtifactDir(generated) } });
+  assert.equal(read(dir, 'CREDITS'), generated);
+});
+
+// tagpr は `git diff HEAD` に出たファイルから commit を作るので、新しく作った CREDITS はリリース PR に入らない
+test('prepare: --credits fails when the repository has no CREDITS yet and writes nothing', () => {
+  const dir = makeRepo({ pkg: false, lock: false });
+  const changelog = read(dir, 'CHANGELOG.md');
+  const r = run(prepare, dir, ['--changelog-only', '--credits'], { env: { TAGPR_ARTIFACT_DIR: makeArtifactDir('new\n') } });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /commit the first one by hand/);
+  assert.equal(read(dir, 'CHANGELOG.md'), changelog);
+  assert.equal(existsSync(join(dir, 'CREDITS')), false);
+});
+
+// 共通の workflow は artifact を落とせなかったとき TAGPR_ARTIFACT_DIR を空にする
+const NO_CREDITS = /--credits needs TAGPR_ARTIFACT_DIR to hold the generated CREDITS file/;
+for (const { name, env, message = NO_CREDITS } of [
+  { name: 'without TAGPR_ARTIFACT_DIR', env: () => ({}) },
+  { name: 'with an empty TAGPR_ARTIFACT_DIR', env: () => ({ TAGPR_ARTIFACT_DIR: '' }) },
+  { name: 'when TAGPR_ARTIFACT_DIR has no CREDITS', env: () => ({ TAGPR_ARTIFACT_DIR: makeArtifactDir(null) }) },
+  {
+    name: 'when the generated CREDITS is empty',
+    env: () => ({ TAGPR_ARTIFACT_DIR: makeArtifactDir('') }),
+    message: /CREDITS is empty/,
+  },
+]) {
+  test(`prepare: --credits fails ${name} and writes nothing`, () => {
+    const dir = makeRepo({ pkg: false, lock: false, files: { CREDITS: 'old\n' } });
+    const changelog = read(dir, 'CHANGELOG.md');
+    const r = run(prepare, dir, ['--changelog-only', '--credits'], { env: env() });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, message);
+    assert.equal(read(dir, 'CHANGELOG.md'), changelog);
+    assert.equal(read(dir, 'CREDITS'), 'old\n');
+  });
+}
 
 // package-lock.json と CHANGELOG.md は、どの失敗でも書き換えない
 for (const { name, opts, message, args, next, current, repository } of [
@@ -617,6 +670,135 @@ test('notes: fails on a missing or empty section', () => {
   const dir = makeRepo({ changelog: `${HEADER}## [Unreleased]\n\n## [1.2.3]\n\n- Old.\n` });
   assert.match(run(notes, dir, ['v9.9.9']).stderr, /no "## \[9\.9\.9\]"/);
   assert.match(run(notes, dir, ['Unreleased']).stderr, /is empty/);
+});
+
+// --- release-tag.mjs ---
+
+const TAGPR_MAIN = '[tagpr]\n\treleaseBranch = main\n';
+
+/** 一時 repo で git を走らせる。署名の設定は外の設定に左右されないよう切る */
+function gitIn(dir, ...args) {
+  const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', '-c', 'commit.gpgsign=false', ...args], {
+    cwd: dir,
+    env: gitEnv(),
+    encoding: 'utf8',
+  });
+  assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`);
+}
+
+/**
+ * タグの commit を checkout した repo。`origin/main` は、`onMain` ならその commit を、そうでなければ
+ * その 1 つ前の commit を指す（タグの commit が main の先にある = main の上に無い）
+ */
+function makeTagRepo({ version = '1.2.4', tagpr = TAGPR_MAIN, onMain = true, name = '@o/x', pkg = true, files: extra = {} } = {}) {
+  const files = { ...extra };
+  if (tagpr !== null) files['.tagpr'] = tagpr;
+  if (pkg) files['package.json'] = `${JSON.stringify({ name, version }, null, 2)}\n`;
+  const dir = makeRepo({ lock: false, pkg: false, files });
+  gitIn(dir, 'init', '-q');
+  gitIn(dir, 'add', '-A');
+  gitIn(dir, 'commit', '-q', '-m', 'base');
+  if (!onMain) {
+    gitIn(dir, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+    gitIn(dir, 'commit', '-q', '--allow-empty', '-m', 'off main');
+  } else {
+    gitIn(dir, 'commit', '-q', '--allow-empty', '-m', 'later');
+    gitIn(dir, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+    gitIn(dir, 'checkout', '-q', 'HEAD~1');
+  }
+  return dir;
+}
+
+const tagScript = join(import.meta.dirname, '..', 'release-tag.mjs');
+
+test('tag: prints the outputs for a tag on the release branch', () => {
+  const r = run(tagScript, makeTagRepo(), ['v1.2.4']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, 'prerelease=false\nspec=@o/x@1.2.4\n');
+});
+
+test('tag: a pre-release tag is a prerelease', () => {
+  const r = run(tagScript, makeTagRepo({ version: '1.3.0-rc.1' }), ['v1.3.0-rc.1']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, 'prerelease=true\nspec=@o/x@1.3.0-rc.1\n');
+});
+
+test('tag: fails when the tag is not the version of package.json', () => {
+  const r = run(tagScript, makeTagRepo(), ['v1.2.5']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /The tag v1\.2\.5 does not match version 1\.2\.4 of package\.json/);
+  assert.equal(r.stdout, '');
+});
+
+test('tag: fails when the commit is not on the release branch', () => {
+  const r = run(tagScript, makeTagRepo({ onMain: false }), ['v1.2.4']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /The commit of v1\.2\.4 is not on main/);
+  assert.equal(r.stdout, '');
+});
+
+test('tag: fails without releaseBranch or without the history of the branch', () => {
+  const none = run(tagScript, makeTagRepo({ tagpr: null }), ['v1.2.4']);
+  assert.equal(none.status, 1);
+  assert.match(none.stderr, /\.tagpr has no tagpr\.releaseBranch/);
+  assert.equal(none.stdout, '');
+  const r = run(tagScript, makeTagRepo({ tagpr: '[tagpr]\n\treleaseBranch = master\n' }), ['v1.2.4']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /Cannot see whether v1\.2\.4 is on master/);
+});
+
+// CPAN のモジュールの形（coveralls-perl など）。package.json は無く、版は .pm と META.json にある
+const TAGPR_CPAN = '[tagpr]\n\treleaseBranch = main\n\tversionFile = lib/Foo.pm,META.json\n';
+const makeCpanTagRepo = (pm, meta) =>
+  makeTagRepo({
+    tagpr: TAGPR_CPAN,
+    pkg: false,
+    files: {
+      'lib/Foo.pm': `package Foo;\nour $VERSION = "${pm}";\n1;\n`,
+      'META.json': `${JSON.stringify({ name: 'Foo', version: meta }, null, 2)}\n`,
+    },
+  });
+
+test('tag: checks every versionFile without a package.json, and prints no spec', () => {
+  const r = run(tagScript, makeCpanTagRepo('1.2.4', '1.2.4'), ['v1.2.4']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, 'prerelease=false\n');
+});
+
+test('tag: fails when a versionFile is not the version of the tag', () => {
+  const r = run(tagScript, makeCpanTagRepo('1.2.4', '1.2.3'), ['v1.2.4']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /^The tag v1\.2\.4 does not match version 1\.2\.3 of META\.json \(versionFile of \.tagpr\)/);
+  assert.equal(r.stdout, '');
+});
+
+test('tag: takes a version with build metadata', () => {
+  const r = run(tagScript, makeTagRepo({ version: '1.2.4+build.1' }), ['v1.2.4+build.1']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, 'prerelease=false\nspec=@o/x@1.2.4+build.1\n');
+});
+
+test('tag: fails on a tag that is not a version', () => {
+  const dir = makeTagRepo();
+  for (const tag of ['1.2.4', 'v1.2', 'sdk/v1.2.4']) {
+    const r = run(tagScript, dir, [tag]);
+    assert.equal(r.status, 1, tag);
+    assert.match(r.stderr, /is not a version tag/, tag);
+  }
+});
+
+test('tag: fails with a message on a package.json that is not JSON', () => {
+  const dir = makeTagRepo();
+  writeFileSync(join(dir, 'package.json'), '{ "version": "1.2.4", }\n');
+  const r = run(tagScript, dir, ['v1.2.4']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /^package\.json is not valid JSON: /);
+});
+
+test('tag: needs a tag', () => {
+  const r = run(tagScript, makeTagRepo(), []);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /usage: .*release-tag\.mjs <tag>/);
 });
 
 // --- changelog.mjs ---
