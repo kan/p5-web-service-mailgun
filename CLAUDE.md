@@ -156,12 +156,16 @@ GitHub Release を作る。仕組みと落ちたときの扱いは `scripts/tagp
 
 ## アーキテクチャ
 
-### URL 組み立ての 2 系統
+### URL 組み立て
 
 - `api_url($method)` — アカウント単位のエンドポイント (`lists/*`)
 - `domain_api_url($method)` — ドメイン単位のエンドポイント (`messages`, `messages.mime`, `events`, `templates/*`)
+- `api_url(_path($self->domain, ...))` / `api_url(_path('domains', $self->domain, ...))` — ドメイン単位のうち、
+  suppressions (`_suppression_url`) と webhooks (`_domain_webhook_url`)。domain も
+  `_path` に通すので、domain が未設定なら送らずに `croak` する。`domain_api_url` は domain を検査しない
+  (既存のメソッドの振る舞いを変えないため、そのままにしてある)。新しいドメイン単位のメソッドはこちらの形で書く
 
-どちらも `https://api:<api_key>@<base>/...` の形で **URL の userinfo に API キーを埋め込む** Basic 認証。
+どれも `https://api:<api_key>@<base>/...` の形で **URL の userinfo に API キーを埋め込む** Basic 認証。
 ベースホストは `api_base()` が `region` 属性 (`us` / `eu` / `au`、未指定は us) で `$API_BASE` /
 `$API_BASE_EU` / `$API_BASE_AU` を切り替える。未知の region は `die`。どれもパッケージ変数なので
 テストから差し替え可能。
@@ -249,5 +253,5 @@ Furl クライアントは `client()` で遅延生成し `_client` にキャッ�
     kan/tagpr-scripts の側で固定される
   - どちらも 504 で落ちたら `gh run rerun <run-id> --failed` で再実行する。publish の
     `Build and check` は PAUSE へ送る前に落ちるので、再実行してよい
-- 未実装 API (Domains / Stats / Tags / Suppressions / Routes / Webhooks / Email Validation、
-  Templates は部分実装) は POD の TODO セクションに列挙されている。実装したら POD の TODO も更新する。
+- 未実装 API (Domains / Logs / Metrics / Tags (新) / Routes / Webhooks の v4 と account 単位 /
+  Email Validation、Templates は部分実装) は POD の TODO セクションに列挙されている。実装したら POD の TODO も更新する。

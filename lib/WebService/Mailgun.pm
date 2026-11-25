@@ -600,6 +600,116 @@ sub delete_domain_webhook {
     $self->decode_response($res);
 }
 
+# The suppressions of the domain (#44): the same six endpoints under /v3/{domain}/<path> for
+# each kind, so their methods are made from this table. `add_many` is the method that adds up to
+# 1000 records in JSON; the allowlist has none (it takes one record, or a CSV file).
+my @SUPPRESSIONS = (
+    {
+        path => 'bounces', list => 'bounces', one => 'bounce', add => 'add_bounce',
+        add_many => 'add_bounces', import => 'import_bounces',
+        delete => 'delete_bounce', delete_all => 'delete_bounces',
+    },
+    {
+        path => 'unsubscribes', list => 'unsubscribes', one => 'unsubscribe',
+        add => 'add_unsubscribe', add_many => 'add_unsubscribes',
+        import => 'import_unsubscribes',
+        delete => 'delete_unsubscribe', delete_all => 'delete_unsubscribes',
+    },
+    {
+        path => 'complaints', list => 'complaints', one => 'complaint',
+        add => 'add_complaint', add_many => 'add_complaints', import => 'import_complaints',
+        delete => 'delete_complaint', delete_all => 'delete_complaints',
+    },
+    {
+        # The API still calls the allowlist `whitelists`.
+        path => 'whitelists', list => 'allowlist_entries', one => 'allowlist_entry',
+        add => 'add_allowlist_entry', import => 'import_allowlist',
+        delete => 'delete_allowlist_entry', delete_all => 'delete_allowlist',
+    },
+);
+
+# POSTs $data as JSON. The strings in it are taken as characters: a string of bytes of UTF-8
+# (one read without decoding) would go out encoded twice.
+sub _post_json {
+    my ($self, $url, $data) = @_;
+
+    my $res = $self->client->post($url, [ 'Content-Type' => 'application/json' ],
+        encode_json($data));
+    $self->decode_response($res);
+}
+
+sub _suppression_url {
+    my ($self, @segments) = @_;
+
+    return $self->api_url(_path($self->domain, @segments));
+}
+
+for my $kind (@SUPPRESSIONS) {
+    my $path = $kind->{path};
+    my %method;
+
+    $method{ $kind->{list} } = sub {
+        my ($self, $query) = @_;
+
+        return $self->recursive(_path($self->domain, $path), _list_query($kind->{list}, $query));
+    };
+
+    $method{ $kind->{one} } = sub {
+        my ($self, $address) = @_;
+
+        my $res = $self->client->get($self->_suppression_url($path, $address));
+        $self->decode_response($res);
+    };
+
+    $method{ $kind->{add} } = sub {
+        my ($self, $args) = @_;
+
+        croak "$kind->{add}() takes a hash reference" unless (reftype($args) // '') eq 'HASH';
+        my $res = $self->client->post($self->_suppression_url($path), [],
+            _form_content($kind->{add}, [ %$args ]));
+        $self->decode_response($res);
+    };
+
+    if ($kind->{add_many}) {
+        $method{ $kind->{add_many} } = sub {
+            my ($self, $records) = @_;
+
+            croak "$kind->{add_many}() takes an array reference of hash references"
+                if ref $records ne 'ARRAY' || !@$records
+                || grep { (reftype($_) // '') ne 'HASH' } @$records;
+            return $self->_post_json($self->_suppression_url($path), $records);
+        };
+    }
+
+    $method{ $kind->{import} } = sub {
+        my ($self, $file) = @_;
+
+        croak "$kind->{import}() takes the path of a CSV file"
+            unless defined $file && !ref $file && -f $file;
+        my $req = POST $self->_suppression_url($path, 'import'),
+            Content_type => 'form-data', Content => [ file => [ _form_value($file) ] ];
+        my $res = $self->client->request($req);
+        $self->decode_response($res);
+    };
+
+    $method{ $kind->{delete} } = sub {
+        my ($self, $address) = @_;
+
+        my $res = $self->client->delete($self->_suppression_url($path, $address));
+        $self->decode_response($res);
+    };
+
+    $method{ $kind->{delete_all} } = sub {
+        my ($self) = @_;
+
+        my $res = $self->client->delete($self->_suppression_url($path));
+        $self->decode_response($res);
+    };
+
+    no strict 'refs';
+    *{ __PACKAGE__ . "::$_" } = $method{$_} for keys %method;
+}
+
 1;
 __END__
 
@@ -1065,6 +1175,98 @@ Delete every URL of a type of event.
 
 L<Delete a webhook|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks/delete-v3-domains--domain-name--webhooks--webhook-name->
 
+=head1 SUPPRESSIONS
+
+The bounces, unsubscribes, complaints and allowlist of the domain. Each kind has the same
+methods: the list of every entry, an entry, adding, importing a CSV file, deleting an entry,
+and deleting every entry. Bounces, unsubscribes and complaints also add up to 1000 entries in
+one request.
+
+The lists follow every page, as C<lists> does (L</Lists of every page>), and take an optional
+hash reference of the query, such as C<limit> (up to 1000) and C<term> (the start of the
+addresses). The methods that add take the fields Mailgun's documentation lists for the kind,
+such as C<code> and C<error> of a bounce, or C<domain> in place of C<address> on the allowlist.
+
+=head2 bounces($query)
+
+    my ($bounces) = $mailgun->bounces({ limit => 1000 });
+
+L<List bounces|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/get-v3--domainid--bounces>
+
+=head2 bounce($address)
+
+    my $bounce = $mailgun->bounce('user@example.com');
+
+L<Lookup a bounce|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/get-v3--domainid--bounces--address->
+
+=head2 add_bounce($args)
+
+    my $res = $mailgun->add_bounce({ address => 'user@example.com', code => 550, error => 'No such user' });
+
+L<Add bounces|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/post-v3--domainid--bounces>
+
+=head2 add_bounces(\@records)
+
+Add up to 1000 bounces in one request, sent as JSON. Give the strings as characters (decoded),
+not as bytes of UTF-8.
+
+    my $res = $mailgun->add_bounces([
+        { address => 'a@example.com', code => '550', error => 'No such user' },
+        { address => 'b@example.com' },
+    ]);
+
+L<Add bounces|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/post-v3--domainid--bounces>
+
+=head2 import_bounces($path)
+
+Import a CSV file of bounces (C<address>, C<code>, C<error> and C<created_at>), up to 25MB.
+
+    my $res = $mailgun->import_bounces('bounces.csv');
+
+L<Import a list of bounces|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/post-v3--domainid--bounces-import>
+
+=head2 delete_bounce($address)
+
+    my $res = $mailgun->delete_bounce('user@example.com');
+
+L<Delete a single bounce|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/delete-v3--domainid--bounces--address->
+
+=head2 delete_bounces()
+
+Delete every bounce of the domain.
+
+    my $res = $mailgun->delete_bounces();
+
+L<Delete all bounces|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/delete-v3--domainid--bounces>
+
+=head2 unsubscribes($query), unsubscribe($address), add_unsubscribe($args), add_unsubscribes(\@records), import_unsubscribes($path), delete_unsubscribe($address), delete_unsubscribes()
+
+The same as the methods of bounces, for unsubscribes. An unsubscribe has the tags it applies to
+(C<*>, the default, for every message of the domain); see Mailgun's documentation for the field.
+
+    my $res = $mailgun->add_unsubscribe({ address => 'user@example.com' });
+
+L<Unsubscribe|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/unsubscribe>
+
+=head2 complaints($query), complaint($address), add_complaint($args), add_complaints(\@records), import_complaints($path), delete_complaint($address), delete_complaints()
+
+The same as the methods of bounces, for complaints.
+
+    my $res = $mailgun->add_complaint({ address => 'user@example.com' });
+
+L<Complaints|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/complaints>
+
+=head2 allowlist_entries($query), allowlist_entry($value), add_allowlist_entry($args), import_allowlist($path), delete_allowlist_entry($value), delete_allowlist()
+
+The same as the methods of bounces, for the allowlist, whose entries are addresses or domains
+(C<value>). There is no method to add many entries in one request: import a CSV file instead.
+
+    my $res = $mailgun->add_allowlist_entry({ address => 'user@example.com' });
+    $res = $mailgun->add_allowlist_entry({ domain => 'example.com' });
+    my $entry = $mailgun->allowlist_entry('example.com');
+
+L<Allowlist|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/allowlist>
+
 =head1 Event Polling
 
 The second value C<event> returns is the C<paging.next> URL of the empty page it stopped at, as a
@@ -1108,8 +1310,6 @@ These APIs are not implemented yet.
 =item * L<Metrics|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/metrics> (in place of the deprecated Stats API)
 
 =item * L<Tags|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new> (the new one, in place of the deprecated Tags API of v3)
-
-=item * Suppressions (L<Bounces|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces>, L<Unsubscribes|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/unsubscribe>, L<Complaints|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/complaints>, L<Allowlist|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/allowlist>)
 
 =item * L<Routes|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/routes>
 

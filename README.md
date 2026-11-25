@@ -518,6 +518,118 @@ my $res = $mailgun->delete_domain_webhook('clicked');
 
 [Delete a webhook](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks/delete-v3-domains--domain-name--webhooks--webhook-name-)
 
+# SUPPRESSIONS
+
+The bounces, unsubscribes, complaints and allowlist of the domain. Each kind has the same
+methods: the list of every entry, an entry, adding, importing a CSV file, deleting an entry,
+and deleting every entry. Bounces, unsubscribes and complaints also add up to 1000 entries in
+one request.
+
+The lists follow every page, as `lists` does (["Lists of every page"](#lists-of-every-page)), and take an optional
+hash reference of the query, such as `limit` (up to 1000) and `term` (the start of the
+addresses). The methods that add take the fields Mailgun's documentation lists for the kind,
+such as `code` and `error` of a bounce, or `domain` in place of `address` on the allowlist.
+
+## bounces($query)
+
+```perl
+my ($bounces) = $mailgun->bounces({ limit => 1000 });
+```
+
+[List bounces](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/get-v3--domainid--bounces)
+
+## bounce($address)
+
+```perl
+my $bounce = $mailgun->bounce('user@example.com');
+```
+
+[Lookup a bounce](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/get-v3--domainid--bounces--address-)
+
+## add\_bounce($args)
+
+```perl
+my $res = $mailgun->add_bounce({ address => 'user@example.com', code => 550, error => 'No such user' });
+```
+
+[Add bounces](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/post-v3--domainid--bounces)
+
+## add\_bounces(\\@records)
+
+Add up to 1000 bounces in one request, sent as JSON. Give the strings as characters (decoded),
+not as bytes of UTF-8.
+
+```perl
+my $res = $mailgun->add_bounces([
+    { address => 'a@example.com', code => '550', error => 'No such user' },
+    { address => 'b@example.com' },
+]);
+```
+
+[Add bounces](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/post-v3--domainid--bounces)
+
+## import\_bounces($path)
+
+Import a CSV file of bounces (`address`, `code`, `error` and `created_at`), up to 25MB.
+
+```perl
+my $res = $mailgun->import_bounces('bounces.csv');
+```
+
+[Import a list of bounces](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/post-v3--domainid--bounces-import)
+
+## delete\_bounce($address)
+
+```perl
+my $res = $mailgun->delete_bounce('user@example.com');
+```
+
+[Delete a single bounce](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/delete-v3--domainid--bounces--address-)
+
+## delete\_bounces()
+
+Delete every bounce of the domain.
+
+```perl
+my $res = $mailgun->delete_bounces();
+```
+
+[Delete all bounces](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/delete-v3--domainid--bounces)
+
+## unsubscribes($query), unsubscribe($address), add\_unsubscribe($args), add\_unsubscribes(\\@records), import\_unsubscribes($path), delete\_unsubscribe($address), delete\_unsubscribes()
+
+The same as the methods of bounces, for unsubscribes. An unsubscribe has the tags it applies to
+(`*`, the default, for every message of the domain); see Mailgun's documentation for the field.
+
+```perl
+my $res = $mailgun->add_unsubscribe({ address => 'user@example.com' });
+```
+
+[Unsubscribe](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/unsubscribe)
+
+## complaints($query), complaint($address), add\_complaint($args), add\_complaints(\\@records), import\_complaints($path), delete\_complaint($address), delete\_complaints()
+
+The same as the methods of bounces, for complaints.
+
+```perl
+my $res = $mailgun->add_complaint({ address => 'user@example.com' });
+```
+
+[Complaints](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/complaints)
+
+## allowlist\_entries($query), allowlist\_entry($value), add\_allowlist\_entry($args), import\_allowlist($path), delete\_allowlist\_entry($value), delete\_allowlist()
+
+The same as the methods of bounces, for the allowlist, whose entries are addresses or domains
+(`value`). There is no method to add many entries in one request: import a CSV file instead.
+
+```perl
+my $res = $mailgun->add_allowlist_entry({ address => 'user@example.com' });
+$res = $mailgun->add_allowlist_entry({ domain => 'example.com' });
+my $entry = $mailgun->allowlist_entry('example.com');
+```
+
+[Allowlist](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/allowlist)
+
 # Event Polling
 
 The second value `event` returns is the `paging.next` URL of the empty page it stopped at, as a
@@ -557,7 +669,6 @@ These APIs are not implemented yet.
 - [Logs](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs) (in place of the deprecated Events API of `event`)
 - [Metrics](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/metrics) (in place of the deprecated Stats API)
 - [Tags](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new) (the new one, in place of the deprecated Tags API of v3)
-- Suppressions ([Bounces](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces), [Unsubscribes](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/unsubscribe), [Complaints](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/complaints), [Allowlist](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/allowlist))
 - [Routes](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/routes)
 - Webhooks: the v4 API of the [domain webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks) (the v3 one is implemented) and the [account webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/account-webhooks)
 - [Email Validation](https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations)
