@@ -7,6 +7,8 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 
 ## [Unreleased]
 
+- Document that Mailgun has deprecated the Events API of `event()` in favor of the Logs API, and point the TODO list at the successors of the deprecated Stats and Tags APIs (Metrics and the new Tags) (#48)
+
 ## [1.1.0] - 2026-11-22
 
 - Fix the methods that take a mailing list address, a member address or a template name: the value went into the URL path as it was, so one with `?`, `#`, `/` or `%` (all allowed in an e-mail address) sent the request to another URL. Such characters are now percent-encoded; `@`, `+` and the others a path segment can hold go out as before. Pass the address as it is: one already percent-encoded is encoded again. A missing (undefined or empty) address or name now dies instead of asking for another URL, such as `list(undef)` for every list (#34)
