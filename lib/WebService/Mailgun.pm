@@ -894,6 +894,11 @@ Get event data. C<$args> is a hash reference of the query. In its place C<$url> 
 string) is fetched as it is, such as the second value an earlier call returned (see
 L</Event Polling>); it must be an https URL on the API's host, or C<event> dies.
 
+Mailgun has deprecated the Events API in favor of the
+L<Logs API|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs>,
+which this module does not implement yet. No date has been announced for its removal, and
+C<event> stays while the Events API works.
+
     # get event data (every page; see "Lists of every page")
     my ($events, $next) = $mailgun->event({ event => 'stored', limit => 50 });
 
@@ -983,9 +988,11 @@ These APIs are not implemented yet.
 
 =item * L<Domains|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains>
 
-=item * L<Stats|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/stats>
+=item * L<Logs|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs> (in place of the deprecated Events API of C<event>)
 
-=item * L<Tags|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags>
+=item * L<Metrics|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/metrics> (in place of the deprecated Stats API)
+
+=item * L<Tags|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new> (the new one, in place of the deprecated Tags API of v3)
 
 =item * Suppressions (L<Bounces|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces>, L<Unsubscribes|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/unsubscribe>, L<Complaints|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/complaints>, L<Allowlist|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/allowlist>)
 

@@ -396,6 +396,11 @@ Get event data. `$args` is a hash reference of the query. In its place `$url` (a
 string) is fetched as it is, such as the second value an earlier call returned (see
 ["Event Polling"](#event-polling)); it must be an https URL on the API's host, or `event` dies.
 
+Mailgun has deprecated the Events API in favor of the
+[Logs API](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs),
+which this module does not implement yet. No date has been announced for its removal, and
+`event` stays while the Events API works.
+
 ```perl
 # get event data (every page; see "Lists of every page")
 my ($events, $next) = $mailgun->event({ event => 'stored', limit => 50 });
@@ -493,8 +498,9 @@ whose `id` was seen already.
 These APIs are not implemented yet.
 
 - [Domains](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains)
-- [Stats](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/stats)
-- [Tags](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags)
+- [Logs](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs) (in place of the deprecated Events API of `event`)
+- [Metrics](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/metrics) (in place of the deprecated Stats API)
+- [Tags](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new) (the new one, in place of the deprecated Tags API of v3)
 - Suppressions ([Bounces](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces), [Unsubscribes](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/unsubscribe), [Complaints](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/complaints), [Allowlist](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/allowlist))
 - [Routes](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/routes)
 - [Webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/webhooks)
