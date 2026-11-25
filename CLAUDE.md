@@ -159,9 +159,11 @@ GitHub Release を作る。仕組みと落ちたときの扱いは `scripts/tagp
 ### URL 組み立て
 
 - `api_url($method)` — アカウント単位のエンドポイント (`lists/*`)
-- `domain_api_url($method)` — ドメイン単位のエンドポイント (`messages`, `messages.mime`, `events`, `templates/*`)
+- `domain_api_url($method)` — ドメイン単位のエンドポイント (`messages`, `messages.mime`, `events`、
+  templates のうち `add_template` / `delete_template(s)`)
 - `api_url(_path($self->domain, ...))` / `api_url(_path('domains', $self->domain, ...))` — ドメイン単位のうち、
-  suppressions (`_suppression_url`) と webhooks (`_domain_webhook_url`)。domain も
+  suppressions と templates の残り (`_domain_url` / `recursive` に渡すパスは `_domain_path`)、webhooks
+  (`_domain_webhook_url`)。domain も
   `_path` に通すので、domain が未設定なら送らずに `croak` する。`domain_api_url` は domain を検査しない
   (既存のメソッドの振る舞いを変えないため、そのままにしてある)。新しいドメイン単位のメソッドはこちらの形で書く
 
@@ -186,7 +188,10 @@ next を辿って全件を集め、`(\@items, $next_uri)` の **2 要素リス�
 空のページの `paging.next`。途中で失敗したときは、失敗したページの URL (渡し直せば続きから取れる。
 `undef` にすると、`event(undef)` が条件なしで全件を取り直してしまう)。`paging.next` の無いページで
 止まったときも、同じ理由で `undef` ではなくそのページの URL を返す。items の無いページと、辿った URL へ
-戻る `paging.next` は失敗として扱う (#35)。`lists()` / `list_members()` のクエリのうち `paging.next` に
+戻る `paging.next` は失敗として扱う (#35)。templates の 2 つの一覧だけは、`{ null_items => 1 }` を渡して、
+items のキーがあって値が `null` のページを空のページとして扱う (文書の型が「array か null」のため)。
+items の場所は、キーの代わりにキーの配列で渡せる (`template_versions()` の `['template', 'versions']`)。
+`lists()` / `list_members()` のクエリのうち `paging.next` に
 無いキーは、次のページの URL に足し直す (#41。`subscribed` が落ちると 2 ページ目から絞り込みが外れる)。
 返り値が 2 つなので呼び出し側はリストで受ける
 (`my ($lists) = $mailgun->lists();`)。スカラーで受けると `$next_uri` が入る。POD の
@@ -214,7 +219,9 @@ Mailgun が返す paging URL には認証情報が含まれないため、`$uri-
 `message()` と `mime()` は `_form_content` でフォームの中身を組み立てる。値の配列 ref は同じキーの
 繰り返しに展開する (`to => [...]`、#36)。ファイルのキー (`message()` は `attachment` / `inline`、
 `mime()` は `message`) の配列 ref だけは、HTTP::Request::Common のファイルの指定として残す。
-`add_template()` は展開しない (配列 ref はファイル)。
+`add_template()` は展開しない (配列 ref はファイル)。templates の版の追加と更新 (`add_template_version()` /
+`update_template_version()`) と `update_template()` も、`add_template()` と同じ `_send_form` で送る
+(更新は `HTTP::Request::Common::PUT`)。JSON の body は `_send_json` で送る。
 
 `mime()` は渡された hash をコピーしてから組み立て、渡された hash を書き換えない (#39)。`message` の
 文字列 (または文字列 ref) は、一時ファイルに書かず、メモリ上の内容としてフォームに載せる
@@ -254,4 +261,4 @@ Furl クライアントは `client()` で遅延生成し `_client` にキャッ�
   - どちらも 504 で落ちたら `gh run rerun <run-id> --failed` で再実行する。publish の
     `Build and check` は PAUSE へ送る前に落ちるので、再実行してよい
 - 未実装 API (Domains / Logs / Metrics / Tags (新) / Routes / Webhooks の v4 と account 単位 /
-  Email Validation、Templates は部分実装) は POD の TODO セクションに列挙されている。実装したら POD の TODO も更新する。
+  Email Validation、account 単位の Templates) は POD の TODO セクションに列挙されている。実装したら POD の TODO も更新する。

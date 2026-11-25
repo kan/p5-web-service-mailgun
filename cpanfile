@@ -4,7 +4,8 @@ requires 'Furl';
 requires 'JSON';
 requires 'URI';
 requires 'Try::Tiny';
-requires 'HTTP::Request::Common';
+# 6.07: PUT takes the content of a form, as POST does (update_template, update_template_version)
+requires 'HTTP::Request::Common', '6.07';
 requires 'Scalar::Util';
 requires 'perl', '5.020000';
 
