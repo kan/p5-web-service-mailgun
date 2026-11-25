@@ -103,6 +103,10 @@ Die when a request fails, instead of returning `undef` (see ["Errors"](#errors))
 The region the domain belongs to: `us`, `eu` or `au`. Any other value dies when a request
 is made. The AU region (`api.au.mailgun.net`) is for Mailgun Send customers who asked for it.
 
+Every version of the API (v3, and the v1 and v4 of some methods, such as `domains` and
+`validate_address`) is called on the host of the region. Mailgun's documentation does not say
+whether the AU region serves Email Validation.
+
 ### timeout (default: the one of [Furl](https://metacpan.org/pod/Furl), 10 seconds)
 
 The seconds a request may take, given to [Furl](https://metacpan.org/pod/Furl). Raise it to send large attachments over a
@@ -752,6 +756,89 @@ my $entry = $mailgun->allowlist_entry('example.com');
 
 [Allowlist](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/allowlist)
 
+# DOMAINS
+
+The domains of the account, with the v4 API (and the v3 one to delete a domain, as Mailgun has
+it).
+
+## domains($query)
+
+Get a page of the domains: the response, with `items` and `total_count`. Unlike `lists`, it
+does not follow the pages: Mailgun gives the page with `skip` and `limit` (up to 1000), not
+with `paging.next`. `$query` is an optional hash reference, such as `state`, `search` or
+`sort`.
+
+```perl
+my $page = $mailgun->domains({ limit => 1000 });
+my @names = map { $_->{name} } @{ $page->{items} };
+my $next  = $mailgun->domains({ limit => 1000, skip => 1000 });
+```
+
+[Get domains](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains/get-v4-domains)
+
+## get\_domain($name)
+
+Get a domain: the response, with `domain` and its DNS records (`sending_dns_records` and
+`receiving_dns_records`). It is not `domain`, which is the domain given to `new`.
+
+```perl
+my $res = $mailgun->get_domain('example.com');
+```
+
+[Get domain](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains/get-v4-domains--name-)
+
+## add\_domain($args)
+
+Add a domain. Like `add_template`, it takes a hash reference or an array reference of
+key-value pairs. The response has no `smtp_login`: Mailgun leaves it out for a new domain.
+
+```perl
+my $res = $mailgun->add_domain({ name => 'mg.example.com', spam_action => 'tag' });
+```
+
+[Create a domain](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains/post-v4-domains)
+
+## update\_domain($name, $args)
+
+```perl
+my $res = $mailgun->update_domain('mg.example.com' => { spam_action => 'block' });
+```
+
+[Update a domain](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains/put-v4-domains--name-)
+
+## verify\_domain($name)
+
+Ask Mailgun to check the DNS records of a domain again.
+
+```perl
+my $res = $mailgun->verify_domain('mg.example.com');
+```
+
+[Verify a domain](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains/put-v4-domains--name--verify)
+
+## delete\_domain($name)
+
+```perl
+my $res = $mailgun->delete_domain('mg.example.com');
+```
+
+[Delete a domain](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains/delete-v3-domains--name-)
+
+# EMAIL VALIDATION
+
+## validate\_address($address, $query)
+
+Validate an address (the v4 API). `$query` is an optional hash reference, such as
+`{ provider_lookup => 'false' }`. The response has `result`, `risk`, `reason` and the
+rest. Mailgun charges for each validation.
+
+```perl
+my $res = $mailgun->validate_address('user@example.com');
+print "$res->{result}\n";   # deliverable, undeliverable, ...
+```
+
+[Validate a single email address](https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations/get-v4-address-validate)
+
 # Event Polling
 
 The second value `event` returns is the `paging.next` URL of the empty page it stopped at, as a
@@ -787,13 +874,13 @@ whose `id` was seen already.
 
 These APIs are not implemented yet.
 
-- [Domains](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains)
+- The rest of the [Domains](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains) API, such as the settings under a domain (listing, adding, updating, verifying and deleting a domain are implemented)
 - [Logs](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs) (in place of the deprecated Events API of `event`)
 - [Metrics](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/metrics) (in place of the deprecated Stats API)
 - [Tags](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new) (the new one, in place of the deprecated Tags API of v3)
 - [Routes](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/routes)
 - Webhooks: the v4 API of the [domain webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks) (the v3 one is implemented) and the [account webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/account-webhooks)
-- [Email Validation](https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations)
+- [Email Validation](https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations) of many addresses (a single address is `validate_address`)
 - [Templates of the account](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/account-templates) (the v4 API; the templates of the domain are implemented)
 
 # SEE ALSO

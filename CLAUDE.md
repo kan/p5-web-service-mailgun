@@ -172,6 +172,13 @@ GitHub Release を作る。仕組みと落ちたときの扱いは `scripts/tagp
 `$API_BASE_EU` / `$API_BASE_AU` を切り替える。未知の region は `die`。どれもパッケージ変数なので
 テストから差し替え可能。
 
+API の版 (#47): Mailgun はエンドポイントごとに版が違う (v1 / v3 / v4) が、どの版も地域のホストは同じ。
+`api_url($method, $version)` は `$version` (`'v4'` など) を渡すと、`api_base()` の末尾の `/v<n>` を
+その版に付け替える (`_api_base_of`)。`$version` を省くと `api_base()` をそのまま使う (v3)。
+`$API_BASE*` の値の意味 (`/v3` まで含む) は変えない。利用者とテストが差し替えるので、差し替えた
+ホストへ v1 / v4 も向くようにしてある。末尾に版の無い `$API_BASE` で版を求めたら `croak` する。
+`domain_api_url` も `api_url` を通す (版を決める場所を 1 つにするため)。
+
 ### エラー処理は `decode_response` に一本化
 
 全 API メソッドは最後に `$self->decode_response($res)` を呼ぶ。成功なら decode 済み JSON、
@@ -260,5 +267,5 @@ Furl クライアントは `client()` で遅延生成し `_client` にキャッ�
     kan/tagpr-scripts の側で固定される
   - どちらも 504 で落ちたら `gh run rerun <run-id> --failed` で再実行する。publish の
     `Build and check` は PAUSE へ送る前に落ちるので、再実行してよい
-- 未実装 API (Domains / Logs / Metrics / Tags (新) / Routes / Webhooks の v4 と account 単位 /
-  Email Validation、account 単位の Templates) は POD の TODO セクションに列挙されている。実装したら POD の TODO も更新する。
+- 未実装 API (Domains の残り (ドメインの下の設定など) / Logs / Metrics / Tags (新) / Routes /
+  Webhooks の v4 と account 単位 / Email Validation の一括、account 単位の Templates) は POD の TODO セクションに列挙されている。実装したら POD の TODO も更新する。
