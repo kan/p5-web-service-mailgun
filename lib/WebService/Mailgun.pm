@@ -531,6 +531,75 @@ sub add_template {
     $self->decode_response($res);
 }
 
+# The webhooks of the domain in v3 (/v3/domains/{domain}/webhooks): the URLs for each type of
+# event. The names leave `webhooks` and the like to the account webhooks of v1 (#46).
+sub _domain_webhook_url {
+    my ($self, @segments) = @_;
+
+    return $self->api_url(_path('domains', $self->domain, 'webhooks', @segments));
+}
+
+# The form of the URLs ($url or [$url, ...]): `url` once for each, as Mailgun takes it. A URL
+# is a string or an object that is one (a URI, say).
+sub _webhook_urls {
+    my ($method, $urls) = @_;
+
+    my @urls = map {
+        blessed($_) && overload::Method($_, '""') ? "$_" : $_
+    } ref $urls eq 'ARRAY' ? @$urls : ($urls);
+    croak "$method() takes a URL or an array reference of URLs"
+        if !@urls || grep { !defined $_ || ref $_ || !length $_ } @urls;
+    return [ map { (url => _form_value($_)) } @urls ];
+}
+
+# The hash reference under $key of the response, or a failure when the response has none.
+sub _webhook_of {
+    my ($self, $res, $key) = @_;
+
+    my $json = $self->decode_response($res) or return;
+    return $json->{$key} if ref $json->{$key} eq 'HASH';
+    return $self->_fail("the response has no '$key'", $res);
+}
+
+sub domain_webhooks {
+    my ($self) = @_;
+
+    my $res = $self->client->get($self->_domain_webhook_url);
+    return $self->_webhook_of($res, 'webhooks');
+}
+
+sub domain_webhook {
+    my ($self, $name) = @_;
+
+    my $res = $self->client->get($self->_domain_webhook_url($name));
+    return $self->_webhook_of($res, 'webhook');
+}
+
+sub add_domain_webhook {
+    my ($self, $name, $urls) = @_;
+
+    # The type goes in the form (`id`), not in the path: _path only checks it is given.
+    _path($name);
+    my $res = $self->client->post($self->_domain_webhook_url, [],
+        [ id => _form_value($name), @{ _webhook_urls('add_domain_webhook', $urls) } ]);
+    $self->decode_response($res);
+}
+
+sub update_domain_webhook {
+    my ($self, $name, $urls) = @_;
+
+    my $res = $self->client->put($self->_domain_webhook_url($name), [],
+        _webhook_urls('update_domain_webhook', $urls));
+    $self->decode_response($res);
+}
+
+sub delete_domain_webhook {
+    my ($self, $name) = @_;
+
+    my $res = $self->client->delete($self->_domain_webhook_url($name));
+    $self->decode_response($res);
+}
+
 1;
 __END__
 
@@ -950,6 +1019,52 @@ Delete a template.
 
 L<Delete a template|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/delete-v3--domain-name--templates--template-name->
 
+=head2 domain_webhooks()
+
+Get the webhooks of the domain (the v3 API): a hash reference of the URLs for each type of
+event, such as C<< { clicked => { urls => [...] }, ... } >>.
+
+    my $webhooks = $mailgun->domain_webhooks();
+
+The types are C<accepted>, C<delivered>, C<opened>, C<clicked>, C<unsubscribed>, C<complained>,
+C<temporary_fail> and C<permanent_fail>. A type takes up to 3 URLs.
+
+L<List all webhooks|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks/get-v3-domains--domain--webhooks>
+
+=head2 domain_webhook($type)
+
+Get the URLs of a type of event, such as C<< { urls => [...] } >>.
+
+    my $webhook = $mailgun->domain_webhook('clicked');
+
+L<Get webhook URLs by type|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks/get-v3-domains--domain-name--webhooks--webhook-name->
+
+=head2 add_domain_webhook($type, $url|\@urls)
+
+Add the webhook of a type of event, with a URL or an array reference of URLs. A URL is a
+string or an object that is one, such as a L<URI>.
+
+    my $res = $mailgun->add_domain_webhook(clicked => 'https://example.com/clicked');
+    $res = $mailgun->add_domain_webhook(opened => ['https://example.com/a', 'https://example.com/b']);
+
+L<Create a webhook|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks/post-v3-domains--domain--webhooks>
+
+=head2 update_domain_webhook($type, $url|\@urls)
+
+Replace the URLs of a type of event.
+
+    my $res = $mailgun->update_domain_webhook(clicked => ['https://example.com/new']);
+
+L<Update a webhook|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks/put-v3-domains--domain-name--webhooks--webhook-name->
+
+=head2 delete_domain_webhook($type)
+
+Delete every URL of a type of event.
+
+    my $res = $mailgun->delete_domain_webhook('clicked');
+
+L<Delete a webhook|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks/delete-v3-domains--domain-name--webhooks--webhook-name->
+
 =head1 Event Polling
 
 The second value C<event> returns is the C<paging.next> URL of the empty page it stopped at, as a
@@ -998,7 +1113,7 @@ These APIs are not implemented yet.
 
 =item * L<Routes|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/routes>
 
-=item * L<Webhooks|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/webhooks>
+=item * Webhooks: the v4 API of the L<domain webhooks|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks> (the v3 one is implemented) and the L<account webhooks|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/account-webhooks>
 
 =item * L<Email Validation|https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations>
 

@@ -462,6 +462,62 @@ my $res = $mailgun->delete_template($name);
 
 [Delete a template](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/delete-v3--domain-name--templates--template-name-)
 
+## domain\_webhooks()
+
+Get the webhooks of the domain (the v3 API): a hash reference of the URLs for each type of
+event, such as `{ clicked => { urls => [...] }, ... }`.
+
+```perl
+my $webhooks = $mailgun->domain_webhooks();
+```
+
+The types are `accepted`, `delivered`, `opened`, `clicked`, `unsubscribed`, `complained`,
+`temporary_fail` and `permanent_fail`. A type takes up to 3 URLs.
+
+[List all webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks/get-v3-domains--domain--webhooks)
+
+## domain\_webhook($type)
+
+Get the URLs of a type of event, such as `{ urls => [...] }`.
+
+```perl
+my $webhook = $mailgun->domain_webhook('clicked');
+```
+
+[Get webhook URLs by type](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks/get-v3-domains--domain-name--webhooks--webhook-name-)
+
+## add\_domain\_webhook($type, $url|\\@urls)
+
+Add the webhook of a type of event, with a URL or an array reference of URLs. A URL is a
+string or an object that is one, such as a [URI](https://metacpan.org/pod/URI).
+
+```perl
+my $res = $mailgun->add_domain_webhook(clicked => 'https://example.com/clicked');
+$res = $mailgun->add_domain_webhook(opened => ['https://example.com/a', 'https://example.com/b']);
+```
+
+[Create a webhook](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks/post-v3-domains--domain--webhooks)
+
+## update\_domain\_webhook($type, $url|\\@urls)
+
+Replace the URLs of a type of event.
+
+```perl
+my $res = $mailgun->update_domain_webhook(clicked => ['https://example.com/new']);
+```
+
+[Update a webhook](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks/put-v3-domains--domain-name--webhooks--webhook-name-)
+
+## delete\_domain\_webhook($type)
+
+Delete every URL of a type of event.
+
+```perl
+my $res = $mailgun->delete_domain_webhook('clicked');
+```
+
+[Delete a webhook](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks/delete-v3-domains--domain-name--webhooks--webhook-name-)
+
 # Event Polling
 
 The second value `event` returns is the `paging.next` URL of the empty page it stopped at, as a
@@ -503,7 +559,7 @@ These APIs are not implemented yet.
 - [Tags](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new) (the new one, in place of the deprecated Tags API of v3)
 - Suppressions ([Bounces](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces), [Unsubscribes](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/unsubscribe), [Complaints](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/complaints), [Allowlist](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/allowlist))
 - [Routes](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/routes)
-- [Webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/webhooks)
+- Webhooks: the v4 API of the [domain webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks) (the v3 one is implemented) and the [account webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/account-webhooks)
 - [Email Validation](https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations)
 - [Templates](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates) (only creating and deleting are implemented)
 
