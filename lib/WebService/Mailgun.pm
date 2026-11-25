@@ -228,18 +228,33 @@ sub api_base {
     return $API_BASE;
 }
 
+# The base of the URLs for $version of the API ('v1', 'v4' ...; #47). Mailgun serves every version
+# on the host of the region, so the version at the end of api_base ($API_BASE and the others,
+# 'api.mailgun.net/v3') is replaced. Without $version, api_base as it is: the v3 API, or what a
+# test or a user set $API_BASE to. A base that does not end in a version cannot give another one.
+sub _api_base_of {
+    my ($self, $version) = @_;
+
+    my $base = $self->api_base;
+    return $base unless defined $version;
+    croak "unsupported API version '$version'" unless $version =~ /\Av[0-9]+\z/;
+    $base =~ s{/v[0-9]+\z}{/$version}
+        or croak "the API base '$base' does not end in a version, so it has no $version";
+    return $base;
+}
+
 sub api_url {
-    my ($self, $method) = @_;
+    my ($self, $method, $version) = @_;
 
     sprintf 'https://api:%s@%s/%s',
-        $self->api_key, $self->api_base, $method;
+        $self->api_key, $self->_api_base_of($version), $method;
 }
 
 sub domain_api_url {
     my ($self, $method) = @_;
 
-    sprintf 'https://api:%s@%s/%s/%s',
-        $self->api_key, $self->api_base, $self->domain, $method;
+    # Through api_url, so that the base of the URLs is made in one place.
+    return $self->api_url(join '/', $self->domain, $method);
 }
 
 # The URL path from its segments, such as ('lists', $address, 'members'). Each segment (a list
@@ -560,6 +575,15 @@ sub add_template {
     return $self->_send_form(post => $self->domain_api_url('templates'), 'add_template', $args);
 }
 
+# $url (a string) with the query of the hash reference $query, as a string.
+sub _url_with_query {
+    my ($url, $query) = @_;
+
+    my $uri = URI->new($url);
+    $uri->query_form($query);
+    return $uri->as_string;
+}
+
 # The path and the URL of an endpoint of the domain (/v3/{domain}/...), for the templates and the
 # suppressions. Unlike domain_api_url, the domain goes through _path too, so a missing domain
 # dies before a request is sent.
@@ -585,9 +609,8 @@ sub templates {
 sub template {
     my ($self, $name, $query) = @_;
 
-    my $uri = URI->new($self->_domain_url('templates', $name));
-    $uri->query_form(_list_query('template', $query));
-    my $res = $self->client->get($uri->as_string);
+    my $res = $self->client->get(
+        _url_with_query($self->_domain_url('templates', $name), _list_query('template', $query)));
     return $self->_hash_of($res, 'template');
 }
 
@@ -650,9 +673,9 @@ sub delete_template_version {
 sub copy_template_version {
     my ($self, $name, $tag, $new_tag, $query) = @_;
 
-    my $uri = URI->new($self->_domain_url('templates', $name, 'versions', $tag, 'copy', $new_tag));
-    $uri->query_form(_list_query('copy_template_version', $query));
-    my $res = $self->client->put($uri->as_string, [], []);
+    my $url = $self->_domain_url('templates', $name, 'versions', $tag, 'copy', $new_tag);
+    my $res = $self->client->put(
+        _url_with_query($url, _list_query('copy_template_version', $query)), [], []);
     $self->decode_response($res);
 }
 
@@ -830,6 +853,60 @@ for my $kind (@SUPPRESSIONS) {
     *{ __PACKAGE__ . "::$_" } = $method{$_} for keys %method;
 }
 
+sub validate_address {
+    my ($self, $address, $query) = @_;
+
+    croak 'validate_address() takes an address' unless defined $address && length $address;
+    my $form = _list_query('validate_address', $query);
+    $form->{address} = _form_value($address);
+    my $res = $self->client->get(_url_with_query($self->api_url('address/validate', 'v4'), $form));
+    $self->decode_response($res);
+}
+
+# The domains of the account. The list is a page of the v4 API (skip and limit, not paging.next),
+# and the domain is deleted with the v3 API, as Mailgun has them.
+sub domains {
+    my ($self, $query) = @_;
+
+    my $res = $self->client->get(
+        _url_with_query($self->api_url('domains', 'v4'), _list_query('domains', $query)));
+    $self->decode_response($res);
+}
+
+sub get_domain {
+    my ($self, $name) = @_;
+
+    my $res = $self->client->get($self->api_url(_path('domains', $name), 'v4'));
+    $self->decode_response($res);
+}
+
+sub add_domain {
+    my ($self, $args) = @_;
+
+    return $self->_send_form(post => $self->api_url('domains', 'v4'), 'add_domain', $args);
+}
+
+sub update_domain {
+    my ($self, $name, $args) = @_;
+
+    return $self->_send_form(put => $self->api_url(_path('domains', $name), 'v4'),
+        'update_domain', $args);
+}
+
+sub verify_domain {
+    my ($self, $name) = @_;
+
+    my $res = $self->client->put($self->api_url(_path('domains', $name, 'verify'), 'v4'), [], []);
+    $self->decode_response($res);
+}
+
+sub delete_domain {
+    my ($self, $name) = @_;
+
+    my $res = $self->client->delete($self->api_url(_path('domains', $name)));
+    $self->decode_response($res);
+}
+
 1;
 __END__
 
@@ -930,6 +1007,10 @@ Die when a request fails, instead of returning C<undef> (see L</Errors>).
 
 The region the domain belongs to: C<us>, C<eu> or C<au>. Any other value dies when a request
 is made. The AU region (C<api.au.mailgun.net>) is for Mailgun Send customers who asked for it.
+
+Every version of the API (v3, and the v1 and v4 of some methods, such as C<domains> and
+C<validate_address>) is called on the host of the region. Mailgun's documentation does not say
+whether the AU region serves Email Validation.
 
 =head3 timeout (default: the one of L<Furl>, 10 seconds)
 
@@ -1487,6 +1568,75 @@ The same as the methods of bounces, for the allowlist, whose entries are address
 
 L<Allowlist|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/allowlist>
 
+=head1 DOMAINS
+
+The domains of the account, with the v4 API (and the v3 one to delete a domain, as Mailgun has
+it).
+
+=head2 domains($query)
+
+Get a page of the domains: the response, with C<items> and C<total_count>. Unlike C<lists>, it
+does not follow the pages: Mailgun gives the page with C<skip> and C<limit> (up to 1000), not
+with C<paging.next>. C<$query> is an optional hash reference, such as C<state>, C<search> or
+C<sort>.
+
+    my $page = $mailgun->domains({ limit => 1000 });
+    my @names = map { $_->{name} } @{ $page->{items} };
+    my $next  = $mailgun->domains({ limit => 1000, skip => 1000 });
+
+L<Get domains|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains/get-v4-domains>
+
+=head2 get_domain($name)
+
+Get a domain: the response, with C<domain> and its DNS records (C<sending_dns_records> and
+C<receiving_dns_records>). It is not C<domain>, which is the domain given to C<new>.
+
+    my $res = $mailgun->get_domain('example.com');
+
+L<Get domain|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains/get-v4-domains--name->
+
+=head2 add_domain($args)
+
+Add a domain. Like C<add_template>, it takes a hash reference or an array reference of
+key-value pairs. The response has no C<smtp_login>: Mailgun leaves it out for a new domain.
+
+    my $res = $mailgun->add_domain({ name => 'mg.example.com', spam_action => 'tag' });
+
+L<Create a domain|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains/post-v4-domains>
+
+=head2 update_domain($name, $args)
+
+    my $res = $mailgun->update_domain('mg.example.com' => { spam_action => 'block' });
+
+L<Update a domain|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains/put-v4-domains--name->
+
+=head2 verify_domain($name)
+
+Ask Mailgun to check the DNS records of a domain again.
+
+    my $res = $mailgun->verify_domain('mg.example.com');
+
+L<Verify a domain|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains/put-v4-domains--name--verify>
+
+=head2 delete_domain($name)
+
+    my $res = $mailgun->delete_domain('mg.example.com');
+
+L<Delete a domain|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains/delete-v3-domains--name->
+
+=head1 EMAIL VALIDATION
+
+=head2 validate_address($address, $query)
+
+Validate an address (the v4 API). C<$query> is an optional hash reference, such as
+C<< { provider_lookup => 'false' } >>. The response has C<result>, C<risk>, C<reason> and the
+rest. Mailgun charges for each validation.
+
+    my $res = $mailgun->validate_address('user@example.com');
+    print "$res->{result}\n";   # deliverable, undeliverable, ...
+
+L<Validate a single email address|https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations/get-v4-address-validate>
+
 =head1 Event Polling
 
 The second value C<event> returns is the C<paging.next> URL of the empty page it stopped at, as a
@@ -1523,7 +1673,7 @@ These APIs are not implemented yet.
 
 =over
 
-=item * L<Domains|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains>
+=item * The rest of the L<Domains|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains> API, such as the settings under a domain (listing, adding, updating, verifying and deleting a domain are implemented)
 
 =item * L<Logs|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs> (in place of the deprecated Events API of C<event>)
 
@@ -1535,7 +1685,7 @@ These APIs are not implemented yet.
 
 =item * Webhooks: the v4 API of the L<domain webhooks|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks> (the v3 one is implemented) and the L<account webhooks|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/account-webhooks>
 
-=item * L<Email Validation|https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations>
+=item * L<Email Validation|https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations> of many addresses (a single address is C<validate_address>)
 
 =item * L<Templates of the account|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/account-templates> (the v4 API; the templates of the domain are implemented)
 
