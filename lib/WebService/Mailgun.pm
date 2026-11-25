@@ -85,11 +85,27 @@ sub _without_request {
     return $copy;
 }
 
+# The list of items of a page: the one under @keys ('items', or 'template', 'versions' for the
+# versions of a template), or undef when there is none. With $null_items, a key that is there
+# with null is an empty list: Mailgun's documentation has the templates' lists as "array or
+# null". The other lists keep a null a failure (#35).
+sub _items_of {
+    my ($json, $null_items, @keys) = @_;
+
+    my $items = $json;
+    for my $k (@keys) {
+        return unless ref $items eq 'HASH' && exists $items->{$k};
+        $items = $items->{$k};
+    }
+    return [] if $null_items && !defined $items;
+    return ref $items eq 'ARRAY' ? $items : undef;
+}
+
 sub recursive {
-    my ($self, $method, $query, $key, $api_uri) = @_;
+    my ($self, $method, $query, $key, $api_uri, $opt) = @_;
 
     $query //= {};
-    $key //= 'items';
+    my @keys = ref $key ? @$key : ($key // 'items');
     my @result;
     my $next;
     unless($api_uri) {
@@ -114,8 +130,9 @@ sub recursive {
         $last_res = $res;
         my $json = $self->decode_response($res);
         # A page without the list of items is a failure, like a request that failed (#35).
-        if ($json && ref $json->{$key} ne 'ARRAY') {
-            $json = $self->_fail("the response has no '$key' list", $res);
+        my $items = $json && _items_of($json, $opt && $opt->{null_items}, @keys);
+        if ($json && !$items) {
+            $json = $self->_fail("the response has no '" . join('.', @keys) . "' list", $res);
         }
         unless ($json) {
             # The request failed: return the URL of the page that failed, so that the caller can
@@ -123,7 +140,7 @@ sub recursive {
             $next = $api_uri;
             last;
         }
-        push @result, @{$json->{$key}};
+        push @result, @$items;
         my $page_next = ref $json->{paging} eq 'HASH' && $json->{paging}->{next};
         # The API key is set on paging.next to fetch it, so it has to be an https URL on the
         # API's host, as for event($url). Any other (a relative URL, say) is a failure.
@@ -143,7 +160,7 @@ sub recursive {
             $page_next->query_form($page_next->query_form, map { ($_ => $query->{$_}) } @missing)
                 if @missing;
         }
-        unless (scalar @{$json->{$key}} && $page_next) {
+        unless (@$items && $page_next) {
             # The end: an empty page, or one with no paging.next. paging.next of the empty page
             # is where the items that come later will be; for events this is how Event Polling
             # goes on (#25). paging.previous would point back over the last page and return it
@@ -511,8 +528,14 @@ sub delete_template {
     $self->decode_response($res);
 }
 
-sub add_template {
-    my ($self, $args) = @_;
+# Sends $args (a hash reference or an array reference of pairs) as form-data with $verb ('post'
+# or 'put'), as _send_json does JSON; $caller names the method in the error. An array reference
+# as a value is a file ([$path]), as HTTP::Request::Common takes it; a decoded string goes out
+# as UTF-8, as for message().
+my %FORM_REQUEST = (post => \&POST, put => \&PUT);
+
+sub _send_form {
+    my ($self, $verb, $url, $caller, $args) = @_;
 
     my @content;
     if (ref($args) eq 'HASH') {
@@ -522,12 +545,114 @@ sub add_template {
         @content = @$args;
     }
     else {
-        die 'unsupport argument. add_template() need HashRef or ArrayRef.';
+        die "unsupport argument. $caller() need HashRef or ArrayRef.";
     }
+    @content = map { _form_value($_) } @content;
 
-    my $req = POST $self->domain_api_url('templates'), Content_type => 'form-data', Content => \@content;
-
+    my $req = $FORM_REQUEST{$verb}->($url, Content_type => 'form-data', Content => \@content);
     my $res = $self->client->request($req);
+    $self->decode_response($res);
+}
+
+sub add_template {
+    my ($self, $args) = @_;
+
+    return $self->_send_form(post => $self->domain_api_url('templates'), 'add_template', $args);
+}
+
+# The path and the URL of an endpoint of the domain (/v3/{domain}/...), for the templates and the
+# suppressions. Unlike domain_api_url, the domain goes through _path too, so a missing domain
+# dies before a request is sent.
+sub _domain_path {
+    my ($self, @segments) = @_;
+
+    return _path($self->domain, @segments);
+}
+
+sub _domain_url {
+    my ($self, @segments) = @_;
+
+    return $self->api_url($self->_domain_path(@segments));
+}
+
+sub templates {
+    my ($self, $query) = @_;
+
+    return $self->recursive($self->_domain_path('templates'), _list_query('templates', $query),
+        'items', undef, { null_items => 1 });
+}
+
+sub template {
+    my ($self, $name, $query) = @_;
+
+    my $uri = URI->new($self->_domain_url('templates', $name));
+    $uri->query_form(_list_query('template', $query));
+    my $res = $self->client->get($uri->as_string);
+    return $self->_hash_of($res, 'template');
+}
+
+sub update_template {
+    my ($self, $name, $args) = @_;
+
+    return $self->_send_form(put => $self->_domain_url('templates', $name), 'update_template', $args);
+}
+
+sub rename_template {
+    my ($self, $name, $new_name) = @_;
+
+    my $res = $self->client->put($self->_domain_url('templates', $name, 'rename', $new_name), [], []);
+    $self->decode_response($res);
+}
+
+sub copy_template {
+    my ($self, $name, $args) = @_;
+
+    croak 'copy_template() takes a hash reference' unless (reftype($args) // '') eq 'HASH';
+    return $self->_send_json(put => $self->_domain_url('templates', $name, 'copy'), $args);
+}
+
+sub template_versions {
+    my ($self, $name, $query) = @_;
+
+    return $self->recursive($self->_domain_path('templates', $name, 'versions'),
+        _list_query('template_versions', $query), ['template', 'versions'], undef,
+        { null_items => 1 });
+}
+
+sub template_version {
+    my ($self, $name, $tag) = @_;
+
+    my $res = $self->client->get($self->_domain_url('templates', $name, 'versions', $tag));
+    return $self->_hash_of($res, 'template');
+}
+
+sub add_template_version {
+    my ($self, $name, $args) = @_;
+
+    return $self->_send_form(post => $self->_domain_url('templates', $name, 'versions'),
+        'add_template_version', $args);
+}
+
+sub update_template_version {
+    my ($self, $name, $tag, $args) = @_;
+
+    return $self->_send_form(put => $self->_domain_url('templates', $name, 'versions', $tag),
+        'update_template_version', $args);
+}
+
+sub delete_template_version {
+    my ($self, $name, $tag) = @_;
+
+    my $res = $self->client->delete($self->_domain_url('templates', $name, 'versions', $tag));
+    $self->decode_response($res);
+}
+
+sub copy_template_version {
+    my ($self, $name, $tag, $new_tag, $query) = @_;
+
+    my $uri = URI->new($self->_domain_url('templates', $name, 'versions', $tag, 'copy', $new_tag));
+    $uri->query_form(_list_query('copy_template_version', $query));
+    my $res = $self->client->put($uri->as_string, [], []);
     $self->decode_response($res);
 }
 
@@ -553,7 +678,7 @@ sub _webhook_urls {
 }
 
 # The hash reference under $key of the response, or a failure when the response has none.
-sub _webhook_of {
+sub _hash_of {
     my ($self, $res, $key) = @_;
 
     my $json = $self->decode_response($res) or return;
@@ -565,14 +690,14 @@ sub domain_webhooks {
     my ($self) = @_;
 
     my $res = $self->client->get($self->_domain_webhook_url);
-    return $self->_webhook_of($res, 'webhooks');
+    return $self->_hash_of($res, 'webhooks');
 }
 
 sub domain_webhook {
     my ($self, $name) = @_;
 
     my $res = $self->client->get($self->_domain_webhook_url($name));
-    return $self->_webhook_of($res, 'webhook');
+    return $self->_hash_of($res, 'webhook');
 }
 
 sub add_domain_webhook {
@@ -628,20 +753,15 @@ my @SUPPRESSIONS = (
     },
 );
 
-# POSTs $data as JSON. The strings in it are taken as characters: a string of bytes of UTF-8
-# (one read without decoding) would go out encoded twice.
-sub _post_json {
-    my ($self, $url, $data) = @_;
+# Sends $data as JSON with $method ('post' or 'put', a method of the client). The strings in it
+# are taken as characters: a string of bytes of UTF-8 (one read without decoding) would go out
+# encoded twice.
+sub _send_json {
+    my ($self, $method, $url, $data) = @_;
 
-    my $res = $self->client->post($url, [ 'Content-Type' => 'application/json' ],
+    my $res = $self->client->$method($url, [ 'Content-Type' => 'application/json' ],
         encode_json($data));
     $self->decode_response($res);
-}
-
-sub _suppression_url {
-    my ($self, @segments) = @_;
-
-    return $self->api_url(_path($self->domain, @segments));
 }
 
 for my $kind (@SUPPRESSIONS) {
@@ -651,13 +771,13 @@ for my $kind (@SUPPRESSIONS) {
     $method{ $kind->{list} } = sub {
         my ($self, $query) = @_;
 
-        return $self->recursive(_path($self->domain, $path), _list_query($kind->{list}, $query));
+        return $self->recursive($self->_domain_path($path), _list_query($kind->{list}, $query));
     };
 
     $method{ $kind->{one} } = sub {
         my ($self, $address) = @_;
 
-        my $res = $self->client->get($self->_suppression_url($path, $address));
+        my $res = $self->client->get($self->_domain_url($path, $address));
         $self->decode_response($res);
     };
 
@@ -665,7 +785,7 @@ for my $kind (@SUPPRESSIONS) {
         my ($self, $args) = @_;
 
         croak "$kind->{add}() takes a hash reference" unless (reftype($args) // '') eq 'HASH';
-        my $res = $self->client->post($self->_suppression_url($path), [],
+        my $res = $self->client->post($self->_domain_url($path), [],
             _form_content($kind->{add}, [ %$args ]));
         $self->decode_response($res);
     };
@@ -677,7 +797,7 @@ for my $kind (@SUPPRESSIONS) {
             croak "$kind->{add_many}() takes an array reference of hash references"
                 if ref $records ne 'ARRAY' || !@$records
                 || grep { (reftype($_) // '') ne 'HASH' } @$records;
-            return $self->_post_json($self->_suppression_url($path), $records);
+            return $self->_send_json(post => $self->_domain_url($path), $records);
         };
     }
 
@@ -686,7 +806,7 @@ for my $kind (@SUPPRESSIONS) {
 
         croak "$kind->{import}() takes the path of a CSV file"
             unless defined $file && !ref $file && -f $file;
-        my $req = POST $self->_suppression_url($path, 'import'),
+        my $req = POST $self->_domain_url($path, 'import'),
             Content_type => 'form-data', Content => [ file => [ _form_value($file) ] ];
         my $res = $self->client->request($req);
         $self->decode_response($res);
@@ -695,14 +815,14 @@ for my $kind (@SUPPRESSIONS) {
     $method{ $kind->{delete} } = sub {
         my ($self, $address) = @_;
 
-        my $res = $self->client->delete($self->_suppression_url($path, $address));
+        my $res = $self->client->delete($self->_domain_url($path, $address));
         $self->decode_response($res);
     };
 
     $method{ $kind->{delete_all} } = sub {
         my ($self) = @_;
 
-        my $res = $self->client->delete($self->_suppression_url($path));
+        my $res = $self->client->delete($self->_domain_url($path));
         $self->decode_response($res);
     };
 
@@ -1129,6 +1249,106 @@ Delete a template.
 
 L<Delete a template|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/delete-v3--domain-name--templates--template-name->
 
+=head2 templates($query)
+
+Get every template of the domain (every page; see L</Lists of every page>). C<$query> is an
+optional hash reference of the query, such as C<< limit => 100 >> (the most Mailgun takes).
+
+    my ($templates) = $mailgun->templates();
+
+L<Get templates|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/get-v3--domain-name--templates>
+
+=head2 template($name, $query)
+
+Get a template (the C<template> of the response). With C<< { active => 'yes' } >>, it has the
+active version in C<version>.
+
+    my $template = $mailgun->template('welcome', { active => 'yes' });
+
+L<Get template|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/get-v3--domain-name--templates--template-name->
+
+=head2 update_template($name, $args)
+
+Update the description of a template. Like C<add_template>, it takes a hash reference or an
+array reference of key-value pairs.
+
+    my $res = $mailgun->update_template(welcome => { description => 'The first mail' });
+
+L<Update template|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/put-v3--domain-name--templates--template-name->
+
+=head2 rename_template($name, $new_name)
+
+    my $res = $mailgun->rename_template(welcome => 'welcome-v2');
+
+L<Rename a template|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/put-v3--domain-name--templates--template-name--rename--new-template-name->
+
+=head2 copy_template($name, $args)
+
+Copy a template to other accounts. C<$args> is the body Mailgun takes, sent as JSON:
+C<requests> (an array reference of C<account_id>, C<name> and C<domain>) and C<source_versions>
+(the versions to copy; all of them when left out).
+
+    my $res = $mailgun->copy_template(welcome => {
+        requests => [ { account_id => $account_id, name => 'welcome', domain => 'example.com' } ],
+    });
+
+L<Copy a template|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/put-v3--domain-name--templates--template-name--copy>
+
+=head2 template_versions($name, $query)
+
+Get every version of a template (every page; see L</Lists of every page>). C<$query> is an
+optional hash reference of the query, such as C<limit>.
+
+    my ($versions) = $mailgun->template_versions('welcome');
+
+L<Get all versions|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/get-v3--domain-name--templates--template-name--versions>
+
+=head2 template_version($name, $tag)
+
+Get a version of a template: the C<template> of the response, with the version in C<version>.
+
+    my $template = $mailgun->template_version(welcome => 'v1');
+    my $content  = $template->{version}{template};
+
+L<Get a version|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/get-v3--domain-name--templates--template-name--versions--version-name->
+
+=head2 add_template_version($name, $args)
+
+Add a version to a template. Like C<add_template>, it takes a hash reference or an array
+reference of key-value pairs, and an array reference as a value is a file.
+
+    my $res = $mailgun->add_template_version(welcome => {
+        template => 'Hello, {{name}}!',
+        tag      => 'v2',
+        comment  => 'With the name',   # (optional)
+        active   => 'yes',             # (optional)
+    });
+
+L<Create a new version|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/post-v3--domain-name--templates--template-name--versions>
+
+=head2 update_template_version($name, $tag, $args)
+
+Update a version of a template. The fields left out stay as they are.
+
+    my $res = $mailgun->update_template_version(welcome => 'v2', { active => 'yes' });
+
+L<Update a version|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/put-v3--domain-name--templates--template-name--versions--version-name->
+
+=head2 delete_template_version($name, $tag)
+
+    my $res = $mailgun->delete_template_version(welcome => 'v1');
+
+L<Delete a version|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/delete-v3--domain-name--templates--template-name--versions--version-name->
+
+=head2 copy_template_version($name, $tag, $new_tag, $query)
+
+Copy a version of a template to a new version of it. C<$query> is an optional hash reference,
+such as C<< { comment => '...' } >>.
+
+    my $res = $mailgun->copy_template_version(welcome => 'v2', 'v3');
+
+L<Copy a version|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/put-v3--domain-name--templates--template-name--versions--version-name--copy--new-version-name->
+
 =head2 domain_webhooks()
 
 Get the webhooks of the domain (the v3 API): a hash reference of the URLs for each type of
@@ -1317,7 +1537,7 @@ These APIs are not implemented yet.
 
 =item * L<Email Validation|https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations>
 
-=item * L<Templates|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates> (only creating and deleting are implemented)
+=item * L<Templates of the account|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/account-templates> (the v4 API; the templates of the domain are implemented)
 
 =back
 

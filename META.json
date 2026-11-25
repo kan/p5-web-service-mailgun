@@ -46,7 +46,7 @@
          "requires" : {
             "Class::Accessor::Lite" : "0",
             "Furl" : "0",
-            "HTTP::Request::Common" : "0",
+            "HTTP::Request::Common" : "6.07",
             "IO::Socket::SSL" : "0",
             "JSON" : "0",
             "Scalar::Util" : "0",

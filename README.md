@@ -462,6 +462,128 @@ my $res = $mailgun->delete_template($name);
 
 [Delete a template](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/delete-v3--domain-name--templates--template-name-)
 
+## templates($query)
+
+Get every template of the domain (every page; see ["Lists of every page"](#lists-of-every-page)). `$query` is an
+optional hash reference of the query, such as `limit => 100` (the most Mailgun takes).
+
+```perl
+my ($templates) = $mailgun->templates();
+```
+
+[Get templates](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/get-v3--domain-name--templates)
+
+## template($name, $query)
+
+Get a template (the `template` of the response). With `{ active => 'yes' }`, it has the
+active version in `version`.
+
+```perl
+my $template = $mailgun->template('welcome', { active => 'yes' });
+```
+
+[Get template](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/get-v3--domain-name--templates--template-name-)
+
+## update\_template($name, $args)
+
+Update the description of a template. Like `add_template`, it takes a hash reference or an
+array reference of key-value pairs.
+
+```perl
+my $res = $mailgun->update_template(welcome => { description => 'The first mail' });
+```
+
+[Update template](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/put-v3--domain-name--templates--template-name-)
+
+## rename\_template($name, $new\_name)
+
+```perl
+my $res = $mailgun->rename_template(welcome => 'welcome-v2');
+```
+
+[Rename a template](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/put-v3--domain-name--templates--template-name--rename--new-template-name-)
+
+## copy\_template($name, $args)
+
+Copy a template to other accounts. `$args` is the body Mailgun takes, sent as JSON:
+`requests` (an array reference of `account_id`, `name` and `domain`) and `source_versions`
+(the versions to copy; all of them when left out).
+
+```perl
+my $res = $mailgun->copy_template(welcome => {
+    requests => [ { account_id => $account_id, name => 'welcome', domain => 'example.com' } ],
+});
+```
+
+[Copy a template](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/put-v3--domain-name--templates--template-name--copy)
+
+## template\_versions($name, $query)
+
+Get every version of a template (every page; see ["Lists of every page"](#lists-of-every-page)). `$query` is an
+optional hash reference of the query, such as `limit`.
+
+```perl
+my ($versions) = $mailgun->template_versions('welcome');
+```
+
+[Get all versions](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/get-v3--domain-name--templates--template-name--versions)
+
+## template\_version($name, $tag)
+
+Get a version of a template: the `template` of the response, with the version in `version`.
+
+```perl
+my $template = $mailgun->template_version(welcome => 'v1');
+my $content  = $template->{version}{template};
+```
+
+[Get a version](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/get-v3--domain-name--templates--template-name--versions--version-name-)
+
+## add\_template\_version($name, $args)
+
+Add a version to a template. Like `add_template`, it takes a hash reference or an array
+reference of key-value pairs, and an array reference as a value is a file.
+
+```perl
+my $res = $mailgun->add_template_version(welcome => {
+    template => 'Hello, {{name}}!',
+    tag      => 'v2',
+    comment  => 'With the name',   # (optional)
+    active   => 'yes',             # (optional)
+});
+```
+
+[Create a new version](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/post-v3--domain-name--templates--template-name--versions)
+
+## update\_template\_version($name, $tag, $args)
+
+Update a version of a template. The fields left out stay as they are.
+
+```perl
+my $res = $mailgun->update_template_version(welcome => 'v2', { active => 'yes' });
+```
+
+[Update a version](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/put-v3--domain-name--templates--template-name--versions--version-name-)
+
+## delete\_template\_version($name, $tag)
+
+```perl
+my $res = $mailgun->delete_template_version(welcome => 'v1');
+```
+
+[Delete a version](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/delete-v3--domain-name--templates--template-name--versions--version-name-)
+
+## copy\_template\_version($name, $tag, $new\_tag, $query)
+
+Copy a version of a template to a new version of it. `$query` is an optional hash reference,
+such as `{ comment => '...' }`.
+
+```perl
+my $res = $mailgun->copy_template_version(welcome => 'v2', 'v3');
+```
+
+[Copy a version](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates/put-v3--domain-name--templates--template-name--versions--version-name--copy--new-version-name-)
+
 ## domain\_webhooks()
 
 Get the webhooks of the domain (the v3 API): a hash reference of the URLs for each type of
@@ -672,7 +794,7 @@ These APIs are not implemented yet.
 - [Routes](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/routes)
 - Webhooks: the v4 API of the [domain webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks) (the v3 one is implemented) and the [account webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/account-webhooks)
 - [Email Validation](https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations)
-- [Templates](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-templates) (only creating and deleting are implemented)
+- [Templates of the account](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/account-templates) (the v4 API; the templates of the domain are implemented)
 
 # SEE ALSO
 

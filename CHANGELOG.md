@@ -10,6 +10,7 @@ Versions up to 0.17 were released from `Changes`, before this file existed.
 - Document that Mailgun has deprecated the Events API of `event()` in favor of the Logs API, and point the TODO list at the successors of the deprecated Stats and Tags APIs (Metrics and the new Tags) (#48)
 - Add the webhooks of the domain (the v3 API): `domain_webhooks()`, `domain_webhook()`, `add_domain_webhook()`, `update_domain_webhook()` and `delete_domain_webhook()` (#46)
 - Add the suppressions of the domain: the bounces (`bounces()`, `bounce()`, `add_bounce()`, `add_bounces()`, `import_bounces()`, `delete_bounce()` and `delete_bounces()`), the unsubscribes and the complaints in methods of the same names, and the allowlist (`allowlist_entries()`, `allowlist_entry()`, `add_allowlist_entry()`, `import_allowlist()`, `delete_allowlist_entry()` and `delete_allowlist()`) (#44)
+- Add the rest of the templates of the domain: `templates()`, `template()`, `update_template()`, `rename_template()`, `copy_template()`, and the versions (`template_versions()`, `template_version()`, `add_template_version()`, `update_template_version()`, `delete_template_version()` and `copy_template_version()`). `add_template()` sends a decoded string (one with the UTF-8 flag) encoded in UTF-8, as `message()` does; one with a character above `0xFF` used to die. HTTP::Request::Common 6.07 or later is required, for the form of a PUT (#45)
 
 ## [1.1.0] - 2026-11-22
 
