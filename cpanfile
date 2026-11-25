@@ -1,6 +1,7 @@
 requires 'Class::Accessor::Lite';
 requires 'IO::Socket::SSL';
-requires 'Furl';
+# 3.08: delete() sends a body (delete_tag)
+requires 'Furl', '3.08';
 requires 'JSON';
 requires 'URI';
 requires 'Try::Tiny';

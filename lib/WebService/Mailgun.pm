@@ -776,7 +776,7 @@ my @SUPPRESSIONS = (
     },
 );
 
-# Sends $data as JSON with $method ('post' or 'put', a method of the client). The strings in it
+# Sends $data as JSON with $method ('post', 'put' or 'delete', a method of the client). The strings in it
 # are taken as characters: a string of bytes of UTF-8 (one read without decoding) would go out
 # encoded twice.
 sub _send_json {
@@ -904,6 +904,66 @@ sub delete_domain {
     my ($self, $name) = @_;
 
     my $res = $self->client->delete($self->api_url(_path('domains', $name)));
+    $self->decode_response($res);
+}
+
+# The analytics of the account (/v1/analytics/...; #48): Logs in place of the Events API, Metrics
+# in place of the Stats API, and the new Tags. Each takes the JSON body Mailgun documents and
+# returns one page: Mailgun's documentation does not say how the last page of Logs and Tags
+# looks, so following the pages is left to the caller (see the POD) until that is known.
+sub _analytics {
+    my ($self, $verb, $path, $caller, $body) = @_;
+
+    $body //= {};
+    croak "$caller() takes a hash reference of the body" unless (reftype($body) // '') eq 'HASH';
+    # A copy as a plain hash: encode_json dies on a blessed one (Hash::MultiValue, say).
+    return $self->_send_json($verb => $self->api_url("analytics/$path", 'v1'), { %$body });
+}
+
+sub logs {
+    my ($self, $body) = @_;
+
+    return $self->_analytics(post => 'logs', 'logs', $body);
+}
+
+sub metrics {
+    my ($self, $body) = @_;
+
+    return $self->_analytics(post => 'metrics', 'metrics', $body);
+}
+
+sub usage_metrics {
+    my ($self, $body) = @_;
+
+    return $self->_analytics(post => 'usage/metrics', 'usage_metrics', $body);
+}
+
+sub tags {
+    my ($self, $body) = @_;
+
+    return $self->_analytics(post => 'tags', 'tags', $body);
+}
+
+sub update_tag {
+    my ($self, $tag, $description) = @_;
+
+    croak 'update_tag() takes a tag' unless defined $tag && length $tag;
+    # Not '' for a missing one: that would clear the description.
+    croak 'update_tag() takes a description' unless defined $description;
+    return $self->_analytics(put => 'tags', 'update_tag', { tag => $tag, description => $description });
+}
+
+sub delete_tag {
+    my ($self, $tag) = @_;
+
+    croak 'delete_tag() takes a tag' unless defined $tag && length $tag;
+    return $self->_analytics(delete => 'tags', 'delete_tag', { tag => $tag });
+}
+
+sub tag_limits {
+    my ($self) = @_;
+
+    my $res = $self->client->get($self->api_url('analytics/tags/limits', 'v1'));
     $self->decode_response($res);
 }
 
@@ -1275,9 +1335,9 @@ string) is fetched as it is, such as the second value an earlier call returned (
 L</Event Polling>); it must be an https URL on the API's host, or C<event> dies.
 
 Mailgun has deprecated the Events API in favor of the
-L<Logs API|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs>,
-which this module does not implement yet. No date has been announced for its removal, and
-C<event> stays while the Events API works.
+L<Logs API|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs>
+(C<logs>; see L</ANALYTICS>). No date has been announced for its removal, and C<event> stays
+while the Events API works.
 
     # get event data (every page; see "Lists of every page")
     my ($events, $next) = $mailgun->event({ event => 'stored', limit => 50 });
@@ -1637,6 +1697,100 @@ rest. Mailgun charges for each validation.
 
 L<Validate a single email address|https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations/get-v4-address-validate>
 
+=head1 ANALYTICS
+
+The analytics of the account, with the v1 API: Logs in place of the deprecated Events API of
+C<event>, Metrics in place of the deprecated Stats API, and the new Tags in place of the
+deprecated Tags API of v3. Each method takes the JSON body Mailgun documents, as a hash
+reference, and returns the response: B<one page>. Mailgun's documentation does not say how the
+last page of the logs and the tags looks, so these methods do not follow the pages; give the
+next page in the body, as below.
+
+=head2 logs($body)
+
+Get a page of the events of the account (every domain), sent as JSON. C<start> and C<end> are
+dates of RFC 2822 (C<Wed, 25 Nov 2026 10:00:00 +0000>), and C<pagination> takes C<limit> (up
+to 100), C<sort> and C<token>. The next page is the token in C<< $res->{pagination}{next} >>.
+
+    use Time::Piece;
+
+    # RFC 2822 in English, whatever the locale is (strftime's %a and %b follow it)
+    sub rfc2822 {
+        my $t = gmtime(shift);
+        sprintf '%s, %02d %s %d %s +0000', $t->day, $t->mday, $t->monname, $t->year, $t->hms;
+    }
+
+    my $body = {
+        start      => rfc2822(time - 3600),
+        end        => rfc2822(time),
+        events     => ['delivered'],
+        pagination => { sort => 'timestamp:asc', limit => 100 },
+    };
+    my $res = $mailgun->logs($body) or die $mailgun->error;
+    # the next page, while there is a token
+    if (my $next = $res->{pagination}{next}) {
+        $body->{pagination}{token} = $next;
+        $res = $mailgun->logs($body);
+    }
+
+In place of L</Event Polling>, ask for the time since the last event kept, with C<start>, and
+drop the events whose C<id> was seen already: Mailgun may store an event some time after it
+happens.
+
+L<Query logs|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs>
+
+=head2 metrics($body)
+
+Get a page of the metrics of the account, such as C<processed_count> and C<delivered_count>,
+by C<dimensions> and C<resolution>. The pages go by C<skip> and C<limit> in C<pagination>;
+fewer items than C<limit> is the last page.
+
+    my $res = $mailgun->metrics({
+        duration   => '7d',
+        resolution => 'day',
+        dimensions => ['time'],
+        metrics    => ['delivered_count', 'bounced_count'],
+    });
+
+L<Query metrics|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/metrics/post-v1-analytics-metrics>
+
+=head2 usage_metrics($body)
+
+The same as C<metrics>, for the usage of the account, such as C<email_validation_count>.
+
+L<Query usage metrics|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/metrics/post-v1-analytics-usage-metrics>
+
+=head2 tags($body)
+
+Get a page of the tags of the account. C<tag> is a tag or the start of tags, and
+C<pagination> takes C<skip> and C<limit> (up to 1000).
+
+    my $res = $mailgun->tags({ tag => 'news', pagination => { limit => 100 } });
+
+L<List tags|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new/post-v1-analytics-tags>
+
+=head2 update_tag($tag, $description)
+
+Set the description of a tag. The description is required: C<''> clears it.
+
+    my $res = $mailgun->update_tag(newsletter => 'The weekly newsletter');
+
+L<Update a tag|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new/put-v1-analytics-tags>
+
+=head2 delete_tag($tag)
+
+    my $res = $mailgun->delete_tag('newsletter');
+
+L<Delete a tag|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new/delete-v1-analytics-tags>
+
+=head2 tag_limits()
+
+The limit of the tags of the account, how many there are (C<count>) and C<limit_reached>.
+
+    my $res = $mailgun->tag_limits();
+
+L<Get tag limits|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new/get-v1-analytics-tags-limits>
+
 =head1 Event Polling
 
 The second value C<event> returns is the C<paging.next> URL of the empty page it stopped at, as a
@@ -1675,11 +1829,7 @@ These APIs are not implemented yet.
 
 =item * The rest of the L<Domains|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains> API, such as the settings under a domain (listing, adding, updating, verifying and deleting a domain are implemented)
 
-=item * L<Logs|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs> (in place of the deprecated Events API of C<event>)
-
-=item * L<Metrics|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/metrics> (in place of the deprecated Stats API)
-
-=item * L<Tags|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new> (the new one, in place of the deprecated Tags API of v3)
+=item * Following every page of C<logs>, C<metrics>, C<usage_metrics> and C<tags> (each returns one page)
 
 =item * L<Routes|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/routes>
 
