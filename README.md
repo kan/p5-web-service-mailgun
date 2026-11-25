@@ -401,9 +401,9 @@ string) is fetched as it is, such as the second value an earlier call returned (
 ["Event Polling"](#event-polling)); it must be an https URL on the API's host, or `event` dies.
 
 Mailgun has deprecated the Events API in favor of the
-[Logs API](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs),
-which this module does not implement yet. No date has been announced for its removal, and
-`event` stays while the Events API works.
+[Logs API](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs)
+(`logs`; see ["ANALYTICS"](#analytics)). No date has been announced for its removal, and `event` stays
+while the Events API works.
 
 ```perl
 # get event data (every page; see "Lists of every page")
@@ -839,6 +839,112 @@ print "$res->{result}\n";   # deliverable, undeliverable, ...
 
 [Validate a single email address](https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations/get-v4-address-validate)
 
+# ANALYTICS
+
+The analytics of the account, with the v1 API: Logs in place of the deprecated Events API of
+`event`, Metrics in place of the deprecated Stats API, and the new Tags in place of the
+deprecated Tags API of v3. Each method takes the JSON body Mailgun documents, as a hash
+reference, and returns the response: **one page**. Mailgun's documentation does not say how the
+last page of the logs and the tags looks, so these methods do not follow the pages; give the
+next page in the body, as below.
+
+## logs($body)
+
+Get a page of the events of the account (every domain), sent as JSON. `start` and `end` are
+dates of RFC 2822 (`Wed, 25 Nov 2026 10:00:00 +0000`), and `pagination` takes `limit` (up
+to 100), `sort` and `token`. The next page is the token in `$res->{pagination}{next}`.
+
+```perl
+use Time::Piece;
+
+# RFC 2822 in English, whatever the locale is (strftime's %a and %b follow it)
+sub rfc2822 {
+    my $t = gmtime(shift);
+    sprintf '%s, %02d %s %d %s +0000', $t->day, $t->mday, $t->monname, $t->year, $t->hms;
+}
+
+my $body = {
+    start      => rfc2822(time - 3600),
+    end        => rfc2822(time),
+    events     => ['delivered'],
+    pagination => { sort => 'timestamp:asc', limit => 100 },
+};
+my $res = $mailgun->logs($body) or die $mailgun->error;
+# the next page, while there is a token
+if (my $next = $res->{pagination}{next}) {
+    $body->{pagination}{token} = $next;
+    $res = $mailgun->logs($body);
+}
+```
+
+In place of ["Event Polling"](#event-polling), ask for the time since the last event kept, with `start`, and
+drop the events whose `id` was seen already: Mailgun may store an event some time after it
+happens.
+
+[Query logs](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs)
+
+## metrics($body)
+
+Get a page of the metrics of the account, such as `processed_count` and `delivered_count`,
+by `dimensions` and `resolution`. The pages go by `skip` and `limit` in `pagination`;
+fewer items than `limit` is the last page.
+
+```perl
+my $res = $mailgun->metrics({
+    duration   => '7d',
+    resolution => 'day',
+    dimensions => ['time'],
+    metrics    => ['delivered_count', 'bounced_count'],
+});
+```
+
+[Query metrics](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/metrics/post-v1-analytics-metrics)
+
+## usage\_metrics($body)
+
+The same as `metrics`, for the usage of the account, such as `email_validation_count`.
+
+[Query usage metrics](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/metrics/post-v1-analytics-usage-metrics)
+
+## tags($body)
+
+Get a page of the tags of the account. `tag` is a tag or the start of tags, and
+`pagination` takes `skip` and `limit` (up to 1000).
+
+```perl
+my $res = $mailgun->tags({ tag => 'news', pagination => { limit => 100 } });
+```
+
+[List tags](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new/post-v1-analytics-tags)
+
+## update\_tag($tag, $description)
+
+Set the description of a tag. The description is required: `''` clears it.
+
+```perl
+my $res = $mailgun->update_tag(newsletter => 'The weekly newsletter');
+```
+
+[Update a tag](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new/put-v1-analytics-tags)
+
+## delete\_tag($tag)
+
+```perl
+my $res = $mailgun->delete_tag('newsletter');
+```
+
+[Delete a tag](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new/delete-v1-analytics-tags)
+
+## tag\_limits()
+
+The limit of the tags of the account, how many there are (`count`) and `limit_reached`.
+
+```perl
+my $res = $mailgun->tag_limits();
+```
+
+[Get tag limits](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new/get-v1-analytics-tags-limits)
+
 # Event Polling
 
 The second value `event` returns is the `paging.next` URL of the empty page it stopped at, as a
@@ -875,9 +981,7 @@ whose `id` was seen already.
 These APIs are not implemented yet.
 
 - The rest of the [Domains](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains) API, such as the settings under a domain (listing, adding, updating, verifying and deleting a domain are implemented)
-- [Logs](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs) (in place of the deprecated Events API of `event`)
-- [Metrics](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/metrics) (in place of the deprecated Stats API)
-- [Tags](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/tags-new) (the new one, in place of the deprecated Tags API of v3)
+- Following every page of `logs`, `metrics`, `usage_metrics` and `tags` (each returns one page)
 - [Routes](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/routes)
 - Webhooks: the v4 API of the [domain webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks) (the v3 one is implemented) and the [account webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/account-webhooks)
 - [Email Validation](https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations) of many addresses (a single address is `validate_address`)

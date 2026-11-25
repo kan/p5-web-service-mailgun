@@ -215,6 +215,15 @@ Mailgun が返す paging URL には認証情報が含まれないため、`$uri-
   URL で、渡すと毎回最大 `limit` 件を取り直す。空のページの `next` なら、その後に保存された
   イベントだけが返る (実 API で確かめた結果は #25)
 
+`recursive` に乗らない一覧が 2 種類ある。どちらも 1 ページずつ返し、続きは呼び出し側が取る。
+
+- オフセット式 (`skip` / `limit`): `domains()` (v4)、analytics の `metrics()` / `usage_metrics()` / `tags()` (v1)
+- トークン式 (`pagination.next` のトークンを次の要求の `pagination.token` へ): analytics の `logs()` (v1)
+
+analytics (#48) は JSON の body を `_analytics` → `_send_json` で送る。Logs と Tags の最後のページの
+形は文書に無いので、**実 API で確かめるまで、全ページを辿る helper を作らない** (無限ループや
+取りこぼしになるため)。`recursive` にトークン式を足さず、作るときは別の繰り返しにする
+
 ### multipart/form-data 送信
 
 `message()` / `mime()` / `add_template()` は Furl のショートカットではなく
@@ -267,5 +276,5 @@ Furl クライアントは `client()` で遅延生成し `_client` にキャッ�
     kan/tagpr-scripts の側で固定される
   - どちらも 504 で落ちたら `gh run rerun <run-id> --failed` で再実行する。publish の
     `Build and check` は PAUSE へ送る前に落ちるので、再実行してよい
-- 未実装 API (Domains の残り (ドメインの下の設定など) / Logs / Metrics / Tags (新) / Routes /
-  Webhooks の v4 と account 単位 / Email Validation の一括、account 単位の Templates) は POD の TODO セクションに列挙されている。実装したら POD の TODO も更新する。
+- 未実装 API (Domains の残り (ドメインの下の設定など) / Routes / Webhooks の v4 と account 単位 /
+  Email Validation の一括、account 単位の Templates、analytics の全ページを辿る helper) は POD の TODO セクションに列挙されている。実装したら POD の TODO も更新する。
