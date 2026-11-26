@@ -751,17 +751,23 @@ sub delete_domain_webhook {
 # The suppressions of the domain (#44): the same six endpoints under /v3/{domain}/<path> for
 # each kind, so their methods are made from this table. `add_many` is the method that adds up to
 # 1000 records in JSON; the allowlist has none (it takes one record, or a CSV file).
+# `json_strings` are the fields add_many sends as JSON strings: Mailgun answers `400 Invalid
+# JSON` to the `code` of a bounce as a number, and a Perl number (550) goes out as one.
+# `delete_tag` takes the tag to remove as the second argument of `delete`, which goes in the
+# query (`?tag=`): Mailgun then removes only that tag of the unsubscribe.
 my @SUPPRESSIONS = (
     {
         path => 'bounces', list => 'bounces', one => 'bounce', add => 'add_bounce',
         add_many => 'add_bounces', import => 'import_bounces',
         delete => 'delete_bounce', delete_all => 'delete_bounces',
+        json_strings => ['code'],
     },
     {
         path => 'unsubscribes', list => 'unsubscribes', one => 'unsubscribe',
         add => 'add_unsubscribe', add_many => 'add_unsubscribes',
         import => 'import_unsubscribes',
         delete => 'delete_unsubscribe', delete_all => 'delete_unsubscribes',
+        delete_tag => 1,
     },
     {
         path => 'complaints', list => 'complaints', one => 'complaint',
@@ -820,7 +826,16 @@ for my $kind (@SUPPRESSIONS) {
             croak "$kind->{add_many}() takes an array reference of hash references"
                 if ref $records ne 'ARRAY' || !@$records
                 || grep { (reftype($_) // '') ne 'HASH' } @$records;
-            return $self->_send_json(post => $self->_domain_url($path), $records);
+            # Copies, so that the records given are not changed.
+            my @strings = @{ $kind->{json_strings} || [] };
+            my @copies = map {
+                my %record = %$_;
+                for my $f (grep { defined $record{$_} && !ref $record{$_} } @strings) {
+                    $record{$f} = "$record{$f}";
+                }
+                \%record;
+            } @$records;
+            return $self->_send_json(post => $self->_domain_url($path), \@copies);
         };
     }
 
@@ -836,9 +851,20 @@ for my $kind (@SUPPRESSIONS) {
     };
 
     $method{ $kind->{delete} } = sub {
-        my ($self, $address) = @_;
+        my ($self, $address, @tag) = @_;
 
-        my $res = $self->client->delete($self->_domain_url($path, $address));
+        my $url = $self->_domain_url($path, $address);
+        # A second argument that cannot be used dies: deleting the whole entry in place of a
+        # tag of it (an undef from a missing key, or a kind without tags) cannot be undone.
+        if (@tag) {
+            croak "$kind->{delete}() takes only an address" unless $kind->{delete_tag};
+            my ($tag) = @tag;
+            $tag = "$tag" if blessed($tag) && overload::Method($tag, '""');
+            croak "$kind->{delete}() takes a tag as a string"
+                if @tag > 1 || !defined $tag || ref $tag || !length $tag;
+            $url = _url_with_query($url, { tag => _form_value($tag) });
+        }
+        my $res = $self->client->delete($url);
         $self->decode_response($res);
     };
 
@@ -1569,7 +1595,8 @@ L<Add bounces|https://documentation.mailgun.com/docs/mailgun/api-reference/send/
 =head2 add_bounces(\@records)
 
 Add up to 1000 bounces in one request, sent as JSON. Give the strings as characters (decoded),
-not as bytes of UTF-8.
+not as bytes of UTF-8. C<code> goes out as a JSON string, even when it is given as a number
+(C<550>): Mailgun answers C<400 Invalid JSON> to a number there.
 
     my $res = $mailgun->add_bounces([
         { address => 'a@example.com', code => '550', error => 'No such user' },
@@ -1580,7 +1607,16 @@ L<Add bounces|https://documentation.mailgun.com/docs/mailgun/api-reference/send/
 
 =head2 import_bounces($path)
 
-Import a CSV file of bounces (C<address>, C<code>, C<error> and C<created_at>), up to 25MB.
+Import a CSV file of bounces, up to 25MB. Mailgun takes the file in the background (C<202
+Accepted>), so the entries show up a moment later. The header row has to have every column,
+even one left empty in the rows: C<address,code,error,created_at>. Without one, Mailgun answers
+C<400 invalid header row>. The header rows of the other kinds are
+C<address,tags,created_at> (unsubscribes), C<address,created_at> (complaints) and
+C<address,domain> (the allowlist).
+
+    # bounces.csv
+    address,code,error,created_at
+    user@example.com,550,No such user,
 
     my $res = $mailgun->import_bounces('bounces.csv');
 
@@ -1600,12 +1636,17 @@ Delete every bounce of the domain.
 
 L<Delete all bounces|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/delete-v3--domainid--bounces>
 
-=head2 unsubscribes($query), unsubscribe($address), add_unsubscribe($args), add_unsubscribes(\@records), import_unsubscribes($path), delete_unsubscribe($address), delete_unsubscribes()
+=head2 unsubscribes($query), unsubscribe($address), add_unsubscribe($args), add_unsubscribes(\@records), import_unsubscribes($path), delete_unsubscribe($address, $tag), delete_unsubscribes()
 
 The same as the methods of bounces, for unsubscribes. An unsubscribe has the tags it applies to
 (C<*>, the default, for every message of the domain); see Mailgun's documentation for the field.
+C<delete_unsubscribe> takes an optional tag: with one, it removes only that tag of the
+unsubscribe, and the others stay. A tag given as C<undef> or C<''> dies rather than deleting
+every tag; leave the argument out for that.
 
     my $res = $mailgun->add_unsubscribe({ address => 'user@example.com' });
+    $res = $mailgun->add_unsubscribe({ address => 'user@example.com', tag => 'news' });
+    $res = $mailgun->delete_unsubscribe('user@example.com', 'news');   # only 'news'
 
 L<Unsubscribe|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/unsubscribe>
 
