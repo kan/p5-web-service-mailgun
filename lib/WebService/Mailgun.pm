@@ -788,9 +788,15 @@ my @SUPPRESSIONS = (
 sub _send_json {
     my ($self, $method, $url, $data) = @_;
 
-    my $res = $self->client->$method($url, [ 'Content-Type' => 'application/json' ],
+    $self->decode_response($self->_json_request($method, $url, $data));
+}
+
+# The response itself, for the callers that look at it after decode_response (all_logs).
+sub _json_request {
+    my ($self, $method, $url, $data) = @_;
+
+    return $self->client->$method($url, [ 'Content-Type' => 'application/json' ],
         encode_json($data));
-    $self->decode_response($res);
 }
 
 for my $kind (@SUPPRESSIONS) {
@@ -935,8 +941,8 @@ sub delete_domain {
 
 # The analytics of the account (/v1/analytics/...; #48): Logs in place of the Events API, Metrics
 # in place of the Stats API, and the new Tags. Each takes the JSON body Mailgun documents and
-# returns one page: Mailgun's documentation does not say how the last page of Logs and Tags
-# looks, so following the pages is left to the caller (see the POD) until that is known.
+# returns one page. all_logs follows the pages of Logs; the pages of Metrics and Tags are left
+# to the caller (see the POD): how Tags goes on past a page is not known yet.
 sub _analytics {
     my ($self, $verb, $path, $caller, $body) = @_;
 
@@ -950,6 +956,48 @@ sub logs {
     my ($self, $body) = @_;
 
     return $self->_analytics(post => 'logs', 'logs', $body);
+}
+
+# Every page of the logs: the token in pagination.next goes in pagination.token of the next
+# request, until a page has no pagination.next (the real API leaves the key out on the last
+# page). Returns the items and undef, or, on a failure, the items so far and the pagination of
+# the page that failed (with its token; none for the first page), as recursive does with the URL:
+# passed back as the pagination of the body, it fetches the rest from there. It is a hash
+# reference even for the first page, so that a failure there is not taken for no logs.
+sub all_logs {
+    my ($self, $body) = @_;
+
+    $body //= {};
+    croak 'all_logs() takes a hash reference of the body' unless (reftype($body) // '') eq 'HASH';
+    my %body = %$body;
+    croak 'all_logs(): pagination is not a hash reference'
+        if defined $body{pagination} && (reftype($body{pagination}) // '') ne 'HASH';
+    my %pagination = %{ $body{pagination} // {} };
+    my $url = $self->api_url('analytics/logs', 'v1');
+
+    my (@items, %seen, $last_res);
+    while (1) {
+        my $token = $pagination{token};
+        # A token that comes again would go round for ever, as a paging.next does in recursive.
+        if (defined $token && $seen{$token}++) {
+            $self->_fail('pagination.next points back to a page already fetched', $last_res);
+            return \@items, { %pagination };
+        }
+        my $res = $self->_json_request(post => $url, { %body, pagination => { %pagination } });
+        $last_res = $res;
+        my $json = $self->decode_response($res) or return \@items, { %pagination };
+        my $page = _items_of($json, 0, 'items');
+        unless ($page) {
+            $self->_fail("the response has no 'items' list", $res);
+            return \@items, { %pagination };
+        }
+        push @items, @$page;
+        my $next = ref $json->{pagination} eq 'HASH' ? $json->{pagination}{next} : undef;
+        # An empty page is the end too, as in recursive: one that still gives a new token (with
+        # no `end` in the body, say) would be followed for ever.
+        return \@items, undef unless @$page && defined $next && !ref $next && length $next;
+        $pagination{token} = $next;
+    }
 }
 
 sub metrics {
@@ -1078,6 +1126,14 @@ items in list context:
     my ($events, $next) = $mailgun->event({ event => 'stored', ascending => 'yes' });
 
 In scalar context they return the URL, not the items.
+
+The lists of the templates and of the suppressions return every page in the same way, but their
+second value is only good for taking up a failure where it stopped. The C<paging.next> of their
+empty page points back to the first page (the suppressions), or to the last one (the versions
+of a template), not to the items that come later.
+
+C<all_logs> also returns every page, and the items fetched so far on a failure; its second
+value is not a URL (see L</all_logs($body)>).
 
 =head1 METHODS
 
@@ -1731,7 +1787,8 @@ L<Delete a domain|https://documentation.mailgun.com/docs/mailgun/api-reference/s
 
 Validate an address (the v4 API). C<$query> is an optional hash reference, such as
 C<< { provider_lookup => 'false' } >>. The response has C<result>, C<risk>, C<reason> and the
-rest. Mailgun charges for each validation.
+rest. Mailgun charges for each validation, and a free account gets C<403 Forbidden>
+("Email Validations are only available for paid accounts.").
 
     my $res = $mailgun->validate_address('user@example.com');
     print "$res->{result}\n";   # deliverable, undeliverable, ...
@@ -1743,9 +1800,8 @@ L<Validate a single email address|https://documentation.mailgun.com/docs/mailgun
 The analytics of the account, with the v1 API: Logs in place of the deprecated Events API of
 C<event>, Metrics in place of the deprecated Stats API, and the new Tags in place of the
 deprecated Tags API of v3. Each method takes the JSON body Mailgun documents, as a hash
-reference, and returns the response: B<one page>. Mailgun's documentation does not say how the
-last page of the logs and the tags looks, so these methods do not follow the pages; give the
-next page in the body, as below.
+reference, and returns the response: B<one page>. Give the next page in the body, as below, or
+use C<all_logs> for every page of the logs.
 
 =head2 logs($body)
 
@@ -1778,7 +1834,44 @@ In place of L</Event Polling>, ask for the time since the last event kept, with 
 drop the events whose C<id> was seen already: Mailgun may store an event some time after it
 happens.
 
+Mailgun keeps the logs for a number of days that depends on the plan (one day on a free
+account). A C<start> before that fails with C<400 Bad Request>, and C<error> tells the time the
+logs go back to.
+
 L<Query logs|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs>
+
+=head2 all_logs($body)
+
+Get every page of C<logs>: it sends the token in C<< pagination.next >> as
+C<< pagination.token >> of the next request, until a page has no C<< pagination.next >> or no
+items. It takes the body
+of C<logs> (it does not change it) and returns two values, as the L</Lists of every page> do:
+an array reference of the items of every page, and C<undef>. Take them in list context: in
+scalar context it returns the second value, not the items.
+
+    my ($items) = $mailgun->all_logs({
+        start      => rfc2822(time - 3600),
+        end        => rfc2822(time),
+        events     => ['delivered'],
+        pagination => { sort => 'timestamp:asc', limit => 100 },
+    });
+
+On a failure it does not return C<undef>: it returns the items fetched so far, and in place of
+C<undef> the C<pagination> of the page that failed, a hash reference (with the token of that
+page; without one when it is the first page). C<error> and C<error_status> tell why. Give it
+back as the C<pagination> of the body to fetch the rest from there. With C<RaiseError>, it dies
+instead, and the items fetched so far are lost.
+
+A C<< pagination.next >> that gives back a token already sent is a failure too, rather than a
+loop. Its C<pagination> has that token, so passing it back goes round the same pages again: ask
+for the logs again with a narrower C<start> and C<end> instead.
+
+    my ($items, $rest) = $mailgun->all_logs($body);
+    if ($rest) {
+        warn $mailgun->error;
+        $body->{pagination} = $rest;
+        my ($more) = $mailgun->all_logs($body);
+    }
 
 =head2 metrics($body)
 
@@ -1870,7 +1963,7 @@ These APIs are not implemented yet.
 
 =item * The rest of the L<Domains|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains> API, such as the settings under a domain (listing, adding, updating, verifying and deleting a domain are implemented)
 
-=item * Following every page of C<logs>, C<metrics>, C<usage_metrics> and C<tags> (each returns one page)
+=item * Following every page of C<metrics>, C<usage_metrics> and C<tags> (each returns one page; C<all_logs> follows the pages of C<logs>)
 
 =item * L<Routes|https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/routes>
 
