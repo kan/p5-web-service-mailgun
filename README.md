@@ -88,6 +88,14 @@ my ($events, $next) = $mailgun->event({ event => 'stored', ascending => 'yes' })
 
 In scalar context they return the URL, not the items.
 
+The lists of the templates and of the suppressions return every page in the same way, but their
+second value is only good for taking up a failure where it stopped. The `paging.next` of their
+empty page points back to the first page (the suppressions), or to the last one (the versions
+of a template), not to the items that come later.
+
+`all_logs` also returns every page, and the items fetched so far on a failure; its second
+value is not a URL (see ["all\_logs($body)"](#all_logs-body)).
+
 # METHODS
 
 ## `new(api_key => $api_key, domain => $domain, region => "us"|"eu"|"au", RaiseError => 0|1, timeout => $seconds)`
@@ -830,7 +838,8 @@ my $res = $mailgun->delete_domain('mg.example.com');
 
 Validate an address (the v4 API). `$query` is an optional hash reference, such as
 `{ provider_lookup => 'false' }`. The response has `result`, `risk`, `reason` and the
-rest. Mailgun charges for each validation.
+rest. Mailgun charges for each validation, and a free account gets `403 Forbidden`
+("Email Validations are only available for paid accounts.").
 
 ```perl
 my $res = $mailgun->validate_address('user@example.com');
@@ -844,9 +853,8 @@ print "$res->{result}\n";   # deliverable, undeliverable, ...
 The analytics of the account, with the v1 API: Logs in place of the deprecated Events API of
 `event`, Metrics in place of the deprecated Stats API, and the new Tags in place of the
 deprecated Tags API of v3. Each method takes the JSON body Mailgun documents, as a hash
-reference, and returns the response: **one page**. Mailgun's documentation does not say how the
-last page of the logs and the tags looks, so these methods do not follow the pages; give the
-next page in the body, as below.
+reference, and returns the response: **one page**. Give the next page in the body, as below, or
+use `all_logs` for every page of the logs.
 
 ## logs($body)
 
@@ -881,7 +889,48 @@ In place of ["Event Polling"](#event-polling), ask for the time since the last e
 drop the events whose `id` was seen already: Mailgun may store an event some time after it
 happens.
 
+Mailgun keeps the logs for a number of days that depends on the plan (one day on a free
+account). A `start` before that fails with `400 Bad Request`, and `error` tells the time the
+logs go back to.
+
 [Query logs](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/logs/post-v1-analytics-logs)
+
+## all\_logs($body)
+
+Get every page of `logs`: it sends the token in `pagination.next` as
+`pagination.token` of the next request, until a page has no `pagination.next` or no
+items. It takes the body
+of `logs` (it does not change it) and returns two values, as the ["Lists of every page"](#lists-of-every-page) do:
+an array reference of the items of every page, and `undef`. Take them in list context: in
+scalar context it returns the second value, not the items.
+
+```perl
+my ($items) = $mailgun->all_logs({
+    start      => rfc2822(time - 3600),
+    end        => rfc2822(time),
+    events     => ['delivered'],
+    pagination => { sort => 'timestamp:asc', limit => 100 },
+});
+```
+
+On a failure it does not return `undef`: it returns the items fetched so far, and in place of
+`undef` the `pagination` of the page that failed, a hash reference (with the token of that
+page; without one when it is the first page). `error` and `error_status` tell why. Give it
+back as the `pagination` of the body to fetch the rest from there. With `RaiseError`, it dies
+instead, and the items fetched so far are lost.
+
+A `pagination.next` that gives back a token already sent is a failure too, rather than a
+loop. Its `pagination` has that token, so passing it back goes round the same pages again: ask
+for the logs again with a narrower `start` and `end` instead.
+
+```perl
+my ($items, $rest) = $mailgun->all_logs($body);
+if ($rest) {
+    warn $mailgun->error;
+    $body->{pagination} = $rest;
+    my ($more) = $mailgun->all_logs($body);
+}
+```
 
 ## metrics($body)
 
@@ -981,7 +1030,7 @@ whose `id` was seen already.
 These APIs are not implemented yet.
 
 - The rest of the [Domains](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domains) API, such as the settings under a domain (listing, adding, updating, verifying and deleting a domain are implemented)
-- Following every page of `logs`, `metrics`, `usage_metrics` and `tags` (each returns one page)
+- Following every page of `metrics`, `usage_metrics` and `tags` (each returns one page; `all_logs` follows the pages of `logs`)
 - [Routes](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/routes)
 - Webhooks: the v4 API of the [domain webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks) (the v3 one is implemented) and the [account webhooks](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/account-webhooks)
 - [Email Validation](https://documentation.mailgun.com/docs/mailgun/api-reference/send/validate/validations) of many addresses (a single address is `validate_address`)

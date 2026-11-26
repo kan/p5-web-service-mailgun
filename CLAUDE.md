@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## リポジトリ概要
 
 CPAN モジュール `WebService::Mailgun` — Mailgun API (https://mailgun.com/) の Perl クライアント。
-実装はほぼ `lib/WebService/Mailgun.pm` の 1 ファイル (約 330 行 + POD)。ビルドは Minilla、
+実装はほぼ `lib/WebService/Mailgun.pm` の 1 ファイル (約 1000 行 + POD)。ビルドは Minilla、
 リリースは tagpr (下の「リリース」)。
 
 ## 開発コマンド
@@ -57,6 +57,7 @@ docker compose run --rm perl minil build                  # 生成物の作り�
 | `MAILGUN_API_KEY` | API キー | 01 / 02 / 04 |
 | `MAILGUN_DOMAIN` | 送信ドメイン (sandbox 可) | 01 / 02 / 04 |
 | `MAILGUN_TO` | 宛先アドレス (sandbox なら authorized recipient) | 01 / 04 |
+| `MAILGUN_REGION` | ドメインの地域 (`eu` など。未設定は us) | 01 / 02 / 04 (任意) |
 
 ```sh
 docker compose run --rm \
@@ -81,8 +82,8 @@ docker compose run --rm \
 | `verify-lockfile.yml` | `master` への push、PR | `actions.lock` の検証 |
 | `tagpr.yml` / `tagpr-label.yml` / `publish.yml` | リリース | 下の「リリース」 |
 
-- テストの 3 つの環境変数は GitHub Secrets (`MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `MAILGUN_TO`) から
-  渡す。fork からの PR では secret が渡らないため実 API テストは自動的にスキップされる
+- テストの環境変数は GitHub Secrets (`MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `MAILGUN_TO` と任意の
+  `MAILGUN_REGION`) から渡す。fork からの PR では secret が渡らないため実 API テストは自動的にスキップされる
 - action の版は `.github/workflows/actions.lock` で固定している。**`uses:` の行を変えたら、repo の
   ルートで `gh actions-lock` を実行し、書き換わった workflow と lockfile を一緒にコミットする。**
   lockfile を手で編集しない。Dependabot の更新 PR は lockfile も書き換える
@@ -215,14 +216,22 @@ Mailgun が返す paging URL には認証情報が含まれないため、`$uri-
   URL で、渡すと毎回最大 `limit` 件を取り直す。空のページの `next` なら、その後に保存された
   イベントだけが返る (実 API で確かめた結果は #25)
 
+templates と suppressions の一覧も `recursive` で辿るが、空のページの `paging.next` は続きを指さない
+(実 API で確かめた。suppressions は最初のページ、templates の版の一覧は `page=last`)。2 つ目の戻り値が
+続きの位置として使えるのは events だけ。
+
 `recursive` に乗らない一覧が 2 種類ある。どちらも 1 ページずつ返し、続きは呼び出し側が取る。
 
 - オフセット式 (`skip` / `limit`): `domains()` (v4)、analytics の `metrics()` / `usage_metrics()` / `tags()` (v1)
 - トークン式 (`pagination.next` のトークンを次の要求の `pagination.token` へ): analytics の `logs()` (v1)
 
-analytics (#48) は JSON の body を `_analytics` → `_send_json` で送る。Logs と Tags の最後のページの
-形は文書に無いので、**実 API で確かめるまで、全ページを辿る helper を作らない** (無限ループや
-取りこぼしになるため)。`recursive` にトークン式を足さず、作るときは別の繰り返しにする
+analytics (#48) は JSON の body を `_analytics` → `_send_json` で送る。全ページを辿るのは `all_logs()` だけで、
+`recursive` とは別の繰り返し (`_json_request` で応答を受ける)。Logs の最後のページは `pagination.next` の
+キーが無いことを実 API で確かめてある。`all_logs()` の 2 つ目の戻り値は、最後まで取れたら `undef`、
+失敗したら続きを取る `pagination` の hash ref (最初のページでも hash ref。0 件と失敗を区別するため)。
+Tags の応答の `pagination` は `limit` と `sort` だけで、`next` も `total` も無い。**`skip` で次のページへ
+進めるかを実 API で確かめるまで、Tags の全ページを辿る helper を作らない** (無限ループや取りこぼしに
+なるため)。`recursive` にトークン式を足さない
 
 ### multipart/form-data 送信
 
@@ -246,7 +255,7 @@ analytics (#48) は JSON の body を `_analytics` → `_send_json` で送る。
 ### オブジェクト生成
 
 `Class::Accessor::Lite` の `new => 1` を使っており、コンストラクタは自動生成 (hashref をそのまま bless)。
-`api_key` / `domain` / `RaiseError` / `region` / `timeout` が rw、`error` / `error_status` が ro。
+`api_key` / `domain` / `RaiseError` / `region` / `timeout` が rw、`error` / `error_status` / `error_response` が ro。
 Furl クライアントは `client()` で遅延生成し `_client` にキャッシュ。`timeout` は生成のときに Furl へ
 渡すので、最初のリクエストの後に変えても効かない (POD にもそう書いてある)。
 
@@ -277,4 +286,4 @@ Furl クライアントは `client()` で遅延生成し `_client` にキャッ�
   - どちらも 504 で落ちたら `gh run rerun <run-id> --failed` で再実行する。publish の
     `Build and check` は PAUSE へ送る前に落ちるので、再実行してよい
 - 未実装 API (Domains の残り (ドメインの下の設定など) / Routes / Webhooks の v4 と account 単位 /
-  Email Validation の一括、account 単位の Templates、analytics の全ページを辿る helper) は POD の TODO セクションに列挙されている。実装したら POD の TODO も更新する。
+  Email Validation の一括、account 単位の Templates、Metrics と Tags の全ページを辿る helper) は POD の TODO セクションに列挙されている。実装したら POD の TODO も更新する。
