@@ -183,6 +183,49 @@ subtest 'an array reference in add_unsubscribe() sends the key once for each' =>
     is_deeply \@tags, ['a', 'b'];
 };
 
+subtest 'add_bounces() sends code as a JSON string, without changing the records' => sub {
+    # Mailgun answers `400 Invalid JSON` to the code as a number.
+    my @records = (
+        { address => 'a@example.com', code => 550, error => 'No such user' },
+        { address => 'b@example.com', code => '551' },
+        { address => 'c@example.com' },
+    );
+    my $requests = requests_of(sub { $mailgun->add_bounces(\@records) });
+    my $sent = $requests->[0]{content};
+    like $sent, qr/"code":"550"/;
+    like $sent, qr/"code":"551"/;
+    unlike $sent, qr/"code":\d/;
+    ok !exists decode_json($sent)->[2]{code}, 'a missing code stays missing';
+    is_deeply decode_json($sent), [
+        { address => 'a@example.com', code => '550', error => 'No such user' },
+        { address => 'b@example.com', code => '551' },
+        { address => 'c@example.com' },
+    ];
+    like encode_json($records[0]), qr/"code":550/, 'the record given still has its number';
+};
+
+subtest 'delete_unsubscribe($address, $tag) removes only that tag' => sub {
+    my $base = "$v3/unsubscribes";
+    is_deeply [ map { $_->{line} } @{ requests_of(sub { $mailgun->delete_unsubscribe('a@example.com', 'news & more') }) } ],
+        ["DELETE $base/a\@example.com?tag=news+%26+more"];
+    is_deeply [ map { $_->{line} } @{ requests_of(sub { $mailgun->delete_unsubscribe('a@example.com', "\x{65E5}") }) } ],
+        ["DELETE $base/a\@example.com?tag=%E6%97%A5"], 'a decoded tag goes out as UTF-8';
+    is_deeply [ map { $_->{line} } @{ requests_of(sub { $mailgun->delete_unsubscribe('a@example.com', URI->new('news')) }) } ],
+        ["DELETE $base/a\@example.com?tag=news"], 'an object that is a string';
+    for my $case ([ "''" => '' ], [ '[]' => [] ], [ 'undef' => undef ]) {
+        my $requests = requests_of(sub {
+            eval { $mailgun->delete_unsubscribe('a@example.com', $case->[1]); 1 } and fail "$case->[0] did not die";
+        });
+        is_deeply $requests, [], "a tag of $case->[0] dies without a request";
+    }
+    for my $delete (qw(delete_bounce delete_complaint delete_allowlist_entry)) {
+        my $requests = requests_of(sub {
+            eval { $mailgun->$delete('a@example.com', 'news'); 1 } and fail "$delete with a tag did not die";
+        });
+        is_deeply $requests, [], "$delete() with a second argument dies without a request";
+    }
+};
+
 subtest 'a decoded file name goes out as UTF-8' => sub {
     my $dir = File::Temp->newdir;
     my $name = "$dir/\x{65E5}\x{672C}.csv";

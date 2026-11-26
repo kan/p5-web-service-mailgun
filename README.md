@@ -683,7 +683,8 @@ my $res = $mailgun->add_bounce({ address => 'user@example.com', code => 550, err
 ## add\_bounces(\\@records)
 
 Add up to 1000 bounces in one request, sent as JSON. Give the strings as characters (decoded),
-not as bytes of UTF-8.
+not as bytes of UTF-8. `code` goes out as a JSON string, even when it is given as a number
+(`550`): Mailgun answers `400 Invalid JSON` to a number there.
 
 ```perl
 my $res = $mailgun->add_bounces([
@@ -696,9 +697,18 @@ my $res = $mailgun->add_bounces([
 
 ## import\_bounces($path)
 
-Import a CSV file of bounces (`address`, `code`, `error` and `created_at`), up to 25MB.
+Import a CSV file of bounces, up to 25MB. Mailgun takes the file in the background (`202
+Accepted`), so the entries show up a moment later. The header row has to have every column,
+even one left empty in the rows: `address,code,error,created_at`. Without one, Mailgun answers
+`400 invalid header row`. The header rows of the other kinds are
+`address,tags,created_at` (unsubscribes), `address,created_at` (complaints) and
+`address,domain` (the allowlist).
 
 ```perl
+# bounces.csv
+address,code,error,created_at
+user@example.com,550,No such user,
+
 my $res = $mailgun->import_bounces('bounces.csv');
 ```
 
@@ -722,13 +732,18 @@ my $res = $mailgun->delete_bounces();
 
 [Delete all bounces](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/bounces/delete-v3--domainid--bounces)
 
-## unsubscribes($query), unsubscribe($address), add\_unsubscribe($args), add\_unsubscribes(\\@records), import\_unsubscribes($path), delete\_unsubscribe($address), delete\_unsubscribes()
+## unsubscribes($query), unsubscribe($address), add\_unsubscribe($args), add\_unsubscribes(\\@records), import\_unsubscribes($path), delete\_unsubscribe($address, $tag), delete\_unsubscribes()
 
 The same as the methods of bounces, for unsubscribes. An unsubscribe has the tags it applies to
 (`*`, the default, for every message of the domain); see Mailgun's documentation for the field.
+`delete_unsubscribe` takes an optional tag: with one, it removes only that tag of the
+unsubscribe, and the others stay. A tag given as `undef` or `''` dies rather than deleting
+every tag; leave the argument out for that.
 
 ```perl
 my $res = $mailgun->add_unsubscribe({ address => 'user@example.com' });
+$res = $mailgun->add_unsubscribe({ address => 'user@example.com', tag => 'news' });
+$res = $mailgun->delete_unsubscribe('user@example.com', 'news');   # only 'news'
 ```
 
 [Unsubscribe](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/unsubscribe)
